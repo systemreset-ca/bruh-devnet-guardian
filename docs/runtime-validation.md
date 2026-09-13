@@ -7,8 +7,10 @@ keys, no production wrapping key.
 
 ## Commit
 
-Validated at commit `5f5affcd0f3d0460acb3ae77c0ab7550d25773fa`
-(run date: 2026-09-13 UTC).
+Validated at commit `4430fa1baeb5cfee157f04766d9b5f54061d8c9f`
+(run date: 2026-09-13 UTC). GitHub sync: `systemreset-ca/bruh-devnet-guardian`
+(separate repository from `bruhlegends`; local clone HEAD
+`88e0590fdae9316effaae50f83753d6243ab7fa1`).
 
 ## Pinned dependency versions
 
@@ -35,7 +37,7 @@ addons.
 
 ## Production build
 
-`bun run build` — **PASS**, built in 387 ms, nitro output generated
+`bun run build` — **PASS**, built in 331 ms, nitro output generated
 (`dist/nitro.json`), `@solana/web3.js` bundled for the worker target
 (656.48 kB / 145.25 kB gzip).
 
@@ -68,12 +70,36 @@ any route, public or authenticated).
 
 ## Custody / auth self-check — `bun run scripts/custody-selftest.ts`
 
-**34 passed, 0 failed** (envelope structure, authentication, AAD scope binding,
+**40 passed, 0 failed** (envelope structure, authentication, AAD scope binding,
 foreign-key and extractable-key rejection, rotation, offline signature
 verification, sender / zero-lamport / fee-cap / mainnet / recipient-mismatch /
 tampered-record rejections, and the fail-closed request-auth suite: replay,
-missing or short secret, body-digest binding, clock skew, wrong secret, path and
-method binding, missing headers, oversized body).
+missing or short secret, missing configured expected key ID, caller key-ID
+substitution, key-ID binding into the HMAC canonical input, missing durable
+nonce store, nonce-store outage, concurrent same-nonce attempts (exactly one
+accepted), body-digest binding, clock skew, wrong secret, path and method
+binding, missing headers, oversized body).
+
+## Request authentication model
+
+`src/lib/custody/request-auth.server.ts` is async and fail-closed:
+
+- The HMAC-SHA256 canonical input binds scheme version, expected key ID,
+  method, path, timestamp, nonce and the SHA-256 digest of the exact raw body.
+- The expected key ID must be configured explicitly. A caller-supplied key ID
+  that differs is rejected (constant-time compare), and the expected value —
+  not the caller's — is what gets signed over.
+- Replay protection requires an explicit **atomic durable** nonce-consumption
+  callback. The production module contains **no in-memory nonce store**: a
+  process-local Map cannot stop replay across Worker instances or restarts.
+  A missing store, a non-atomic `false` result, or any store error rejects the
+  request. Nonce store errors are never logged (they can carry request-derived
+  material).
+- `src/lib/custody/nonce-store.server.ts` resolves the durable consumer and
+  currently returns `null`, so the diagnostic route rejects every request.
+- The only in-memory nonce store lives in the test harness
+  (`scripts/support/in-memory-nonce-store.ts`) and is never importable from
+  production modules.
 
 ## Secret handling
 
@@ -97,6 +123,12 @@ method binding, missing headers, oversized body).
 - Worker runtime excludes native addons, `child_process`, `sharp`-class
   packages, and file watching; only pure-JS / Web Crypto paths are usable.
 - The SDK smoke module is intentionally not exposed as an HTTP endpoint.
+- **Real durable database integration is not deployed yet.** There is no nonce
+  table, no schema and no durable store, so `getDurableNonceConsumer()` returns
+  `null` and every authenticated request fails closed. Authentication cannot be
+  used in production until a durable atomic nonce store (conditional insert on a
+  unique nonce key, shared across instances) is deployed.
+- No signing HTTP route, keys, secrets, funded activation or schema exist.
 
 ## Revision history / GitHub
 
