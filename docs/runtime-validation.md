@@ -1010,3 +1010,36 @@ diagnostic kill switch remains "false".
 
 Source SHA before this slice: fa1fca32b9863838f497a9c0ebf0e2ba760d110a (this
 slice auto-committed on top).
+
+## Bounded live RPC diagnostic — prepared (NOT PUBLISHED)
+
+`scripts/live-rpc-diagnostic-probe.ts` now also prints the reviewed bounded
+transport metadata for the signed request: `classification` (one of no_attempt |
+responded | http_error | timeout | transport_failure), `attempts`, `responses`,
+numeric `statuses`, `httpErrors`, `timedOut`, `transportFailed`. It asserts the
+metadata is bounded (numbers, booleans and one fixed label only) and still
+prints no raw body, header, endpoint, provider text, signature, nonce or secret.
+Exactly three requests: unauthenticated denial, one signed check, byte-identical
+replay denial. No polling.
+
+`SIGNER_DIAGNOSTIC_ENABLED` set to "true" through the secure secret manager for
+this single bounded trial (name and literal value only; the caller credentials
+were not read or touched). It takes effect live only after a republish and goes
+back to "false" immediately after the evidence is captured.
+
+Nothing else changed: the wallet bridge route stays disabled and unconfigured
+(`BRUH_BRIDGE_ENABLED` absent), no wallet enable flag, wallet store, wrapping
+key, provisioning activation or schema application, no funds, no mainnet.
+Production policy callbacks remain absent and fail closed.
+
+Independently confirmed separately: the BRUH gateway-to-receiver contract passed
+with actual Ed25519 service signatures and fixture Telegram/storage callbacks —
+not real-account proof.
+
+Suites after this slice: custody 45/45, Telegram 27/27, nonce boundary 14/14,
+crypto probe 28/28, RPC diagnostic 51/51, RPC client 89/89, wallet provisioning
+67/67, wallet record 94/94, bridge receiver 102/102, bridge gateway contract
+51/51. `tsgo --noEmit` clean, `bun run build` PASS.
+
+Source SHA before this slice: 01d3311198fe0a5010d5dd166e975355adaaed47 (this
+slice auto-committed on top). Nothing was published by me.
