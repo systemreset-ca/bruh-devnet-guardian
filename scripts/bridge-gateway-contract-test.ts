@@ -79,9 +79,9 @@ async function verify(input: {
     path,
     rawBody,
     headers: input.headers ?? signBridgeRequest({ secret: SECRET, keyId: KEY_ID, path, rawBody, now: NOW }),
-    expectedKeyId: input.keyId === undefined ? KEY_ID : input.keyId,
-    expectedPublicKey: input.publicKey === undefined ? bridgeCallerPublicKey(SECRET) : input.publicKey,
-    consumeNonce: input.consumeNonce === undefined ? nonceStore() : input.consumeNonce,
+    expectedKeyId: "keyId" in input ? input.keyId : KEY_ID,
+    expectedPublicKey: "publicKey" in input ? input.publicKey : bridgeCallerPublicKey(SECRET),
+    consumeNonce: "consumeNonce" in input ? input.consumeNonce : nonceStore(),
     clock: input.clock ?? (() => NOW),
   });
 }
