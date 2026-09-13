@@ -7,3 +7,5 @@ At source `079d1b67affbc3bc0844dac653e5c696d76be6e4`, checksum-verified Gitleaks
 Only those two historical finding fingerprints are reviewed in `.gitleaksignore`. No broad file/path/rule exemption is introduced. Wallet seeds, encryption keys, caller secrets and elevated backend credentials must never enter commits, chat or logs.
 
 Re-run with `gitleaks git . --log-opts=--all --redact=100 --no-banner --ignore-gitleaks-allow --timeout=120`. Later source commits and runtime activation require fresh review; this record is not a deployed-service security certification.
+
+Follow-up review on 2026-09-13 scanned 55 commits (~533 KB). Eleven findings were exact SQL nonce-test call fingerprints: the literal signer-key-tst test identifier, synthetic nonce variables and malformed-input fixtures. These are not caller authentication secrets. Exact fingerprint exceptions preserve scanning for real credentials and preserve every historical commit. No broad file or pattern exclusions were added.
