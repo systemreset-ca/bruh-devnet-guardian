@@ -44,6 +44,12 @@ export interface RpcTransportMetadata {
   httpErrorCount: number;
   timedOut: boolean;
   transportFailed: boolean;
+  /**
+   * Fixed boolean only: true when the host rejected the fetch receiver
+   * (`TypeError` whose message is exactly "Illegal invocation"). No raw error
+   * name or message text is ever carried.
+   */
+  illegalInvocation: boolean;
   classification:
     | "no_attempt"
     | "responded"
