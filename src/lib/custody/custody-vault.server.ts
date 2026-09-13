@@ -78,15 +78,16 @@ function aad(input: CustodyEnvelope, purpose: "seed" | "key"): Uint8Array<ArrayB
   return Uint8Array.from(
     new TextEncoder().encode(
       JSON.stringify([
-      "BRUH-custody-v1",
-      purpose,
-      scope.walletId,
-      scope.groupId,
-      scope.membershipId,
-      scope.network,
-      input.address,
-      input.wrappingKeyVersion,
-    ]),
+        "BRUH-custody-v1",
+        purpose,
+        scope.walletId,
+        scope.groupId,
+        scope.membershipId,
+        scope.network,
+        input.address,
+        input.wrappingKeyVersion,
+      ]),
+    ),
   );
 }
 
