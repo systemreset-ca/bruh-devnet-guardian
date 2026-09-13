@@ -102,6 +102,7 @@ export async function runReadOnlyRpcSelfCheck(
   let httpErrorCount = 0;
   let timedOut = false;
   let transportFailed = false;
+  let illegalInvocation = false;
   const countingTransport: typeof fetch = async (input, init) => {
     calls += 1;
     let method = "";
