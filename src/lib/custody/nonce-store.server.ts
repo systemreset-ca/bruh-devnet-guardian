@@ -18,9 +18,12 @@
  */
 import type { NonceConsumer } from "./request-auth.server";
 
-/** Hard TTL bounds, mirrored by the database routine. */
-const MIN_TTL_SECONDS = 1;
-const MAX_TTL_SECONDS = 300;
+/**
+ * Fixed retention, mirrored exactly by the database routine, which rejects any
+ * other value. A shorter window would let a nonce be reclaimed while the
+ * verifier's 60-second timestamp window still accepts the same request.
+ */
+const FIXED_TTL_SECONDS = 300;
 
 /**
  * Returns an atomic durable nonce consumer, or `null` when the backend is not
