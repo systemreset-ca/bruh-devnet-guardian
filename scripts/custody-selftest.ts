@@ -277,6 +277,36 @@ async function main() {
         .every((r) => !r.ok && r.reason === "replayed_nonce"),
   );
 
+  // Timestamp near the end of the skew window: still accepted, and the nonce
+  // must remain unusable for as long as that timestamp stays valid.
+  const nearExpiryNonce = newNonce();
+  const nearExpiryTs = String(Date.now() - 58_000);
+  const nearExpiry = await verify(sign({ nonce: nearExpiryNonce, ts: nearExpiryTs }));
+  check("timestamp 58s old (near skew expiry) accepted", nearExpiry.ok);
+  const nearExpiryReplay = await verify(sign({ nonce: nearExpiryNonce, ts: nearExpiryTs }));
+  check(
+    "same nonce still rejected while its timestamp remains valid",
+    !nearExpiryReplay.ok && nearExpiryReplay.reason === "replayed_nonce",
+  );
+
+  // The verifier must ask the durable store for exactly 300s of retention.
+  const requestedTtls: number[] = [];
+  const recordingStore = createInMemoryNonceStore();
+  const recordedResult = await verify(sign(), {
+    consumeNonce: async (args) => {
+      requestedTtls.push(args.expiresAt - args.now);
+      return recordingStore.consume(args);
+    },
+  });
+  check(
+    "callback requested retention is exactly 300000 ms (300s)",
+    recordedResult.ok && requestedTtls.length === 1 && requestedTtls[0] === 300_000,
+  );
+  check(
+    "requested retention exceeds the 60s timestamp window",
+    requestedTtls[0] !== undefined && requestedTtls[0] > 60_000,
+  );
+
   const tamperedBody = sign();
   const digestFail = await verify(tamperedBody, {
     rawBody: JSON.stringify({ probe: false }),
