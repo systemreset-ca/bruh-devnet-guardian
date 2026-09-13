@@ -10,43 +10,33 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiPublicSignerSelftestRouteImport } from './routes/api/public/signer/selftest'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicSignerSelftestRoute = ApiPublicSignerSelftestRouteImport.update({
-  id: '/api/public/signer/selftest',
-  path: '/api/public/signer/selftest',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/api/public/signer/selftest': typeof ApiPublicSignerSelftestRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/api/public/signer/selftest': typeof ApiPublicSignerSelftestRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/api/public/signer/selftest': typeof ApiPublicSignerSelftestRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/public/signer/selftest'
+  fullPaths: '/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/public/signer/selftest'
-  id: '__root__' | '/' | '/api/public/signer/selftest'
+  to: '/'
+  id: '__root__' | '/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ApiPublicSignerSelftestRoute: typeof ApiPublicSignerSelftestRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -58,19 +48,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/signer/selftest': {
-      id: '/api/public/signer/selftest'
-      path: '/api/public/signer/selftest'
-      fullPath: '/api/public/signer/selftest'
-      preLoaderRoute: typeof ApiPublicSignerSelftestRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ApiPublicSignerSelftestRoute: ApiPublicSignerSelftestRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
