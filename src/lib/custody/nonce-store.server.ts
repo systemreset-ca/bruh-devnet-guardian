@@ -29,6 +29,23 @@ const FIXED_TTL_SECONDS = 300;
  * Returns an atomic durable nonce consumer, or `null` when the backend is not
  * configured. `null` makes the verifier reject with `nonce_store_unavailable`.
  */
+/** Fixed retention window in milliseconds, required exactly (no rounding). */
+export const FIXED_TTL_MS = FIXED_TTL_SECONDS * 1000;
+
+/**
+ * Fail-closed window guard: the verifier's window must be exactly 300000 ms.
+ * No rounding, no clamping — 299_001..300_000 ms must NOT be accepted, so the
+ * database retention can never be shorter than the timestamp validity window.
+ */
+export function assertFixedRetentionWindow(now: number, expiresAt: number): void {
+  if (!Number.isFinite(now) || !Number.isFinite(expiresAt)) {
+    throw new Error("nonce_ttl_out_of_range");
+  }
+  if (expiresAt - now !== FIXED_TTL_MS) {
+    throw new Error("nonce_ttl_out_of_range");
+  }
+}
+
 export async function getDurableNonceConsumer(): Promise<NonceConsumer | null> {
   const url = process.env["SUPABASE_URL"];
   const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
@@ -37,12 +54,9 @@ export async function getDurableNonceConsumer(): Promise<NonceConsumer | null> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
   return async ({ keyId, nonce, now, expiresAt }) => {
-    // Derive the TTL from the verifier's own window; never from a caller value.
-    const ttlSeconds = Math.ceil((expiresAt - now) / 1000);
-    if (ttlSeconds !== FIXED_TTL_SECONDS) {
-      // Fail closed rather than clamping or requesting a shorter retention.
-      throw new Error("nonce_ttl_out_of_range");
-    }
+    // Exact-window check only; never rounded, never a caller-supplied value.
+    assertFixedRetentionWindow(now, expiresAt);
+
 
     const { data, error } = await supabaseAdmin.rpc("consume_signer_nonce", {
       p_key_id: keyId,

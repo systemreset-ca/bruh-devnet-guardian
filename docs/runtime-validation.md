@@ -439,3 +439,37 @@ injected secret.
 
 Scope: this slice authorizes diagnostic auth configuration only — no production
 wrapping keys, no wallet provisioning routes, no user funds, no mainnet.
+
+## Adapter exact-window fix and secret-name verification (audit follow-up)
+
+Audit at GitHub main `1b4c3981e9dcff126c7a1c5c47720f0ab1f45de4` was correct:
+`nonce-store.server.ts` still derived retention with
+`Math.ceil((expiresAt - now) / 1000)`, which accepted any window in
+299001..300000 ms. That rounding is removed.
+
+Now: `assertFixedRetentionWindow(now, expiresAt)` requires
+`expiresAt - now === 300000` exactly (`FIXED_TTL_MS`), throws
+`nonce_ttl_out_of_range` otherwise, and the routine is always called with a
+fixed `p_ttl_seconds: 300`. No rounding, no clamping, no fallback.
+
+New offline suite `scripts/nonce-adapter-boundary-test.ts` — **14/14 PASS**:
+exact 300000 ms accepted; 299001 / 299500 / 299999 / 300001 / 299000 / 60000 /
+1000 / 0 / -1 / 3600000 ms rejected; NaN and non-finite endpoints rejected.
+
+Configured secret NAMES verified via the supported secrets tool (names only,
+values never displayed and never available to the agent). Present:
+`SIGNER_CALLER_SECRET`, `SIGNER_CALLER_KEY_ID`, `SIGNER_DIAGNOSTIC_ENABLED`,
+plus the platform-managed `LOVABLE_API_KEY` and `LOVABLE_CRON_SECRET`. The
+secure generation step therefore did succeed; the editor Secrets table listing
+only the two managed entries was a stale/filtered view, not a storage failure.
+No documentation correction for missing secrets is needed.
+
+Evidence in this slice: adapter boundary 14/14, custody/auth 45/45, Telegram
+27/27, diagnostic probe guards 28/28, SDK smoke 9/9 (passed=true), typecheck
+clean, Worker bundle build PASS. Source SHA before this commit: `cfc8c83`.
+Database SQL suite and parallel HTTP replay trials were NOT re-run in this
+slice (source-only change; the applied V2 routine already enforces
+`p_ttl_seconds = 300` server-side).
+
+Not published. Deployed Worker execution still unverified. No wrapping keys,
+wallet routes, funds or mainnet.
