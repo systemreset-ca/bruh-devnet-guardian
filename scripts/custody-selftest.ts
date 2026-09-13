@@ -29,6 +29,7 @@ import {
   newNonce,
   signCanonical,
   verifySignerRequest,
+  NONCE_TTL_MS,
   type NonceConsumer,
 } from "../src/lib/custody/request-auth.server";
 import {
@@ -255,7 +256,7 @@ async function main() {
   const upperNonce = await verify(sign({ nonce: newNonce().toUpperCase() }));
   check(
     "non-canonical uppercase hex nonce rejected",
-    !upperNonce.ok && upperNonce.reason === "malformed_auth",
+    !upperNonce.ok && upperNonce.reason === "malformed_request",
   );
 
 
