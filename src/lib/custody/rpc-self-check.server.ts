@@ -74,10 +74,13 @@ function uuid(): string {
 }
 
 /**
- * @param transport injected only by tests; production uses global fetch.
+ * @param transport injected only by tests; production uses the host's global
+ * fetch through an explicit arrow so the call keeps `globalThis` as its
+ * receiver. Some Worker hosts reject an extracted, unbound `fetch` with
+ * `TypeError: Illegal invocation`. There is no fallback transport.
  */
 export async function runReadOnlyRpcSelfCheck(
-  transport: typeof fetch = fetch,
+  transport: typeof fetch = (input, init) => globalThis.fetch(input, init),
 ): Promise<RpcSelfCheckReport> {
   const checks: Record<string, boolean> = {
     endpointPinnedHttps: false,
