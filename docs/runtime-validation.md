@@ -7,7 +7,7 @@ keys, no production wrapping key.
 
 ## Commit
 
-Validated at commit `ec846f79efd8bbddd83c66888abd4d3246127595`
+Validated at commit `af439912be9e7e8f999236342085608058a997bc`
 (run date: 2026-09-13 UTC). GitHub sync: `systemreset-ca/bruh-devnet-guardian`
 (separate repository from `bruhlegends`; local clone HEAD
 `88e0590fdae9316effaae50f83753d6243ab7fa1`).
@@ -121,12 +121,78 @@ binding, missing headers, oversized body).
   A missing store, a non-atomic `false` result, or any store error rejects the
   request. Nonce store errors are never logged (they can carry request-derived
   material).
-- `src/lib/custody/nonce-store.server.ts` resolves the durable consumer and
-  currently returns `null`, so any future authenticated caller is denied. No
-  durable store implementation and no test fallback exist.
+- `src/lib/custody/nonce-store.server.ts` resolves the durable consumer from
+  this project's own Cloud backend (see below). It returns `null` when the
+  backend is not configured, which denies the request — there is still no
+  in-memory or test fallback in production code.
 - The only in-memory nonce store lives in the test harness
   (`scripts/support/in-memory-nonce-store.ts`) and is never importable from
   production modules.
+
+## Durable nonce storage (this project's backend only)
+
+Objects (applied migration):
+
+- `public.signer_nonces` — primary key `(key_id, nonce)`, `consumed_at`,
+  `expires_at`; index on `expires_at`.
+- `public.consume_signer_nonce(key_id text, nonce text, ttl_seconds integer)
+  RETURNS boolean` — `SECURITY DEFINER`, `SET search_path = public`.
+
+Grants (exact):
+
+```sql
+REVOKE ALL ON TABLE public.signer_nonces FROM anon;
+REVOKE ALL ON TABLE public.signer_nonces FROM authenticated;
+REVOKE ALL ON TABLE public.signer_nonces FROM service_role;
+REVOKE ALL ON FUNCTION public.consume_signer_nonce(text,text,integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.consume_signer_nonce(text,text,integer) FROM anon;
+REVOKE ALL ON FUNCTION public.consume_signer_nonce(text,text,integer) FROM authenticated;
+GRANT EXECUTE ON FUNCTION public.consume_signer_nonce(text,text,integer) TO service_role;
+```
+
+No Data API role holds any table privilege, so direct client or server-role
+reads/writes are impossible. RLS is `ENABLE`d and `FORCE`d with four explicit
+deny-all policies. The routine is the single access path.
+
+Routine constraints: `key_id` must match `^[A-Za-z0-9_.:-]{8,64}$`, `nonce`
+must match `^[A-Za-z0-9_-]{16,128}$`, and `ttl_seconds` must be 1–300 —
+anything else raises. Expiry is computed from the server clock (`now()`) only;
+no caller-supplied timestamp is accepted. Each call deletes at most 200 expired
+rows. First use is a single atomic
+`INSERT ... ON CONFLICT (key_id, nonce) DO UPDATE ... WHERE expires_at < now()
+RETURNING true`, so a replay within the window returns `false` and an expired
+row is reclaimable exactly once.
+
+Adapter: `getDurableNonceConsumer()` derives `ttl_seconds` from the verifier's
+own window (never a caller value), fails closed if that value falls outside
+1–300 rather than clamping it, and throws on any store error without logging
+the error body (it can echo request-derived values).
+
+### SQL test results — 23 passed, 0 failed (single database session)
+
+`scripts/sql/nonce-store-tests.sql`. Covers: first use true, replay false,
+server-clock expiry bounds, expired-row reclaimed exactly once, rejection of
+short/invalid `key_id`, short/invalid/NULL `nonce`, zero/negative/NULL and
+over-300s TTL, bounded cleanup of 50 expired rows, and ACL assertions (no table
+privileges for `anon`, `authenticated` or `service_role`; RLS enabled and
+forced; all four policies deny; only `service_role` may execute the routine;
+routine is `SECURITY DEFINER`).
+
+**Labelling:** the `sequential_same_nonce_one_winner` check runs two attempts in
+**one** session. That is sequential execution, **not** concurrency, and it does
+not by itself prove atomicity across sessions.
+
+### Real multi-session concurrency — 12 passed, 0 failed
+
+`scripts/nonce-concurrency-test.ts`. Each attempt is a separate HTTP request to
+the routine, so attempts land on **distinct database sessions/connections**.
+8 trials × 6 simultaneous requests for the same `(key_id, nonce)` produced
+**exactly one** first-use winner in every trial; 6 simultaneous distinct nonces
+all succeeded; TTL values 0, -1 and 3600 were rejected server-side.
+
+Note: the sandbox database role cannot execute the routine or create schemas, so
+these tests were driven through the Data API with the server role. Test output
+is booleans and counts only.
 
 ## Secret handling
 
@@ -154,11 +220,14 @@ binding, missing headers, oversized body).
   status page).
 - Request authentication has never been exercised over real HTTP — only via
   direct in-process calls in the CLI test suite.
-- **Real durable database integration is not deployed yet.** There is no nonce
-  table, no schema and no durable store, so `getDurableNonceConsumer()` returns
-  `null` and every authenticated request fails closed. Authentication cannot be
-  used in production until a durable atomic nonce store (conditional insert on a
-  unique nonce key, shared across instances) is deployed.
+- Durable nonce storage now exists in this project's own backend and is tested
+  (single-session SQL suite plus real multi-session concurrency). It has **not**
+  been exercised from inside the deployed Worker runtime — see the validation
+  scope section; nothing is deployed.
+- Caller secrets (`SIGNER_CALLER_SECRET`, `SIGNER_CALLER_KEY_ID`) are not
+  configured, so authentication denies every request regardless of the store.
+- Expired-row cleanup is opportunistic (max 200 rows per consumption call);
+  there is no scheduled vacuum job.
 - No signing HTTP route, keys, secrets, funded activation or schema exist.
 
 ## Revision history / GitHub

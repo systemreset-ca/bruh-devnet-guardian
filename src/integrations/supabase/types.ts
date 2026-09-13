@@ -14,13 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      signer_nonces: {
+        Row: {
+          consumed_at: string
+          expires_at: string
+          key_id: string
+          nonce: string
+        }
+        Insert: {
+          consumed_at?: string
+          expires_at: string
+          key_id: string
+          nonce: string
+        }
+        Update: {
+          consumed_at?: string
+          expires_at?: string
+          key_id?: string
+          nonce?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      consume_signer_nonce: {
+        Args: { p_key_id: string; p_nonce: string; p_ttl_seconds: number }
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never
