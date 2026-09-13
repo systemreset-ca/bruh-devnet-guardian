@@ -765,3 +765,42 @@ Actual network evidence in THIS project:
   until the reviewer enables and publishes the read-only diagnostic and a live
   probe is run.
 - No mainnet, no funds, no keys, no airdrop, no broadcast at any point.
+
+## Wallet review fix: authenticated decryption before any address is exposed
+
+Finding (review at 372cc2ed857dca57fe3c5b7b2a127700b937ad58): structural record
+validation was in place, but `provisionDevnetWallet` never called the existing
+`vault.validate(envelope, identity)`, so a structurally valid but corrupted or
+substituted 48-byte ciphertext could have projected an unverified deposit
+address. Fixed in source only; the wallet schema is still NOT applied and
+provisioning is still disabled.
+
+Changes:
+- `provisionDevnetWallet` now runs `vault.validate` (unseal, address
+  re-derivation, seed zeroing — no signing) before BOTH the existing-record
+  return and the race-winning public projection. Failure is a new fail-closed
+  reason `envelope_authentication_failed`; nothing is logged.
+- `result.created` must be `typeof === "boolean"`; a non-boolean flag is now
+  `store_record_invalid` instead of being coerced to a silent `false`.
+- When `created === true`, the persisted row must be the exact candidate:
+  walletId, wrapping key version, address, frozen, and every envelope field
+  compared field by field (same key count) — scope compatibility alone is no
+  longer sufficient.
+
+Tests: `scripts/wallet-record-selftest.ts` 94/94 PASS (was 88), adding: tampered
+48-byte ciphertext (canonical base64, correct length, one flipped byte) on both
+the stored-row and winning-row paths; a substituted address consistent across
+row and envelope on both paths; a genuinely sealed but non-candidate row claimed
+as `created=true`; the same row accepted as pre-existing after authentication;
+non-boolean created flag. `scripts/wallet-provisioning-selftest.ts` 67/67
+unchanged and green. All other suites unchanged: custody 45/45, Telegram 27/27,
+nonce boundary 14/14, crypto probe 28/28, RPC client 74/74, RPC diagnostic
+49/49, wallet SQL (PGlite) 164/164, SDK smoke 9/9; `tsgo --noEmit` clean;
+`bun run build` PASS.
+
+Fixture labelling: every service-accepted row in the provisioning and record
+suites carries an ACTUAL throwaway sealed envelope from an ephemeral in-memory
+vault, so authenticated decryption is genuinely exercised. Purely structural
+synthetic envelopes (random padding) remain in the SQL/PGlite suite and in
+rejection cases only, and are explicitly NOT crypto proof. Membership approvals
+are mocks, not real BRUH proof. No real keys, funds, endpoints or mainnet.
