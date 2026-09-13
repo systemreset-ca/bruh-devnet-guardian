@@ -139,7 +139,7 @@ export async function provisionDevnetWallet(input: {
   const body = parseBody(input.request.rawBody);
   if (!body.ok) return { ok: false, reason: "malformed_request" };
 
-  const initData = verifyThirdPartyInitData(
+  const initData = (input.verifyInitData ?? verifyThirdPartyInitData)(
     body.initData,
     input.now === undefined ? {} : { nowMs: input.now },
   );
