@@ -56,7 +56,12 @@ export type ProvisionFailure =
   | "store_unavailable"
   | "inconsistent_mapping"
   | "store_record_invalid"
+  | "envelope_authentication_failed"
   | "store_error";
+
+/** Internal sentinel: authenticated decryption of a stored envelope failed. */
+class EnvelopeAuthFailure extends Error {}
+
 
 export type ProvisionOutcome =
   | { ok: true; created: boolean; wallet: WalletPublicView }
