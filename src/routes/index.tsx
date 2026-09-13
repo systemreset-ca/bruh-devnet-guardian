@@ -78,9 +78,10 @@ const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string
   {
     name: "Network / on-chain reads",
     tone: "warn",
-    state: "unsupported here",
-    note: "The wallet SDK's connection object cannot even be created in this runtime, because it always opens a subscription channel this build deliberately blocks. No network read, fee lookup or broadcast has ever been tested. A reviewed request-only adapter, proven on the deployed runtime, is required before any live-network use, and no value may be substituted from stored records.",
+    state: "request-only reader added; not proven on the deployed runtime",
+    note: "A reviewed request-only devnet reader now exists and never creates the wallet SDK connection object that this runtime cannot build. It checks the network fingerprint, takes a settled block reference and confirms the network charge stays inside the reserved allowance. One real read-only check passed in a local test environment; nothing has been proven on the deployed runtime, nothing is wired to wallets or the chat bot, and no send or broadcast path is reachable. No value may be substituted from stored records.",
   },
+
   {
     name: "Diagnostic probe",
     tone: "ok",

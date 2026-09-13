@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicSignerRpcSelftestRouteImport } from './routes/api/public/signer/rpc-selftest'
 import { Route as ApiPublicSignerSelftestRouteImport } from './routes/api/public/signer/selftest'
 
 const IndexRoute = IndexRouteImport.update({
@@ -17,6 +18,12 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicSignerRpcSelftestRoute =
+  ApiPublicSignerRpcSelftestRouteImport.update({
+    id: '/api/public/signer/rpc-selftest',
+    path: '/api/public/signer/rpc-selftest',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicSignerSelftestRoute = ApiPublicSignerSelftestRouteImport.update({
   id: '/api/public/signer/selftest',
   path: '/api/public/signer/selftest',
@@ -25,27 +32,36 @@ const ApiPublicSignerSelftestRoute = ApiPublicSignerSelftestRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/public/signer/rpc-selftest': typeof ApiPublicSignerRpcSelftestRoute
   '/api/public/signer/selftest': typeof ApiPublicSignerSelftestRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/public/signer/rpc-selftest': typeof ApiPublicSignerRpcSelftestRoute
   '/api/public/signer/selftest': typeof ApiPublicSignerSelftestRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/public/signer/rpc-selftest': typeof ApiPublicSignerRpcSelftestRoute
   '/api/public/signer/selftest': typeof ApiPublicSignerSelftestRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/public/signer/selftest'
+  fullPaths:
+    '/' | '/api/public/signer/rpc-selftest' | '/api/public/signer/selftest'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/public/signer/selftest'
-  id: '__root__' | '/' | '/api/public/signer/selftest'
+  to: '/' | '/api/public/signer/rpc-selftest' | '/api/public/signer/selftest'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/public/signer/rpc-selftest'
+    | '/api/public/signer/selftest'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPublicSignerRpcSelftestRoute: typeof ApiPublicSignerRpcSelftestRoute
   ApiPublicSignerSelftestRoute: typeof ApiPublicSignerSelftestRoute
 }
 
@@ -56,6 +72,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/signer/rpc-selftest': {
+      id: '/api/public/signer/rpc-selftest'
+      path: '/api/public/signer/rpc-selftest'
+      fullPath: '/api/public/signer/rpc-selftest'
+      preLoaderRoute: typeof ApiPublicSignerRpcSelftestRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/signer/selftest': {
@@ -70,6 +93,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPublicSignerRpcSelftestRoute: ApiPublicSignerRpcSelftestRoute,
   ApiPublicSignerSelftestRoute: ApiPublicSignerSelftestRoute,
 }
 export const routeTree = rootRouteImport
