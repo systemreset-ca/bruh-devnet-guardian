@@ -29,6 +29,23 @@ const FIXED_TTL_SECONDS = 300;
  * Returns an atomic durable nonce consumer, or `null` when the backend is not
  * configured. `null` makes the verifier reject with `nonce_store_unavailable`.
  */
+/** Fixed retention window in milliseconds, required exactly (no rounding). */
+export const FIXED_TTL_MS = FIXED_TTL_SECONDS * 1000;
+
+/**
+ * Fail-closed window guard: the verifier's window must be exactly 300000 ms.
+ * No rounding, no clamping — 299_001..300_000 ms must NOT be accepted, so the
+ * database retention can never be shorter than the timestamp validity window.
+ */
+export function assertFixedRetentionWindow(now: number, expiresAt: number): void {
+  if (!Number.isFinite(now) || !Number.isFinite(expiresAt)) {
+    throw new Error("nonce_ttl_out_of_range");
+  }
+  if (expiresAt - now !== FIXED_TTL_MS) {
+    throw new Error("nonce_ttl_out_of_range");
+  }
+}
+
 export async function getDurableNonceConsumer(): Promise<NonceConsumer | null> {
   const url = process.env["SUPABASE_URL"];
   const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
