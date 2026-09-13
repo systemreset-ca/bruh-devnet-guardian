@@ -1,0 +1,5 @@
+# Reviewed initial Lovable template: sb_publishable_ keys identify public API clients.
+# No wallet seed, wrapping key, caller secret or elevated Supabase key is exempted.
+# Exact historical fingerprints preserve all future-file/commit secret detection.
+69d01688adee4a99d27da4187c13c10b71e48a5b:.env:generic-api-key:2
+69d01688adee4a99d27da4187c13c10b71e48a5b:.env:generic-api-key:5
