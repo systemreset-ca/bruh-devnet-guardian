@@ -24,13 +24,17 @@ import {
   HEADER_NONCE,
   HEADER_SIGNATURE,
   HEADER_TIMESTAMP,
-  __resetNonceStore,
   bodyDigestHex,
   canonicalString,
   newNonce,
   signCanonical,
   verifySignerRequest,
+  type NonceConsumer,
 } from "../src/lib/custody/request-auth.server";
+import {
+  createFailingNonceStore,
+  createInMemoryNonceStore,
+} from "./support/in-memory-nonce-store";
 
 let pass = 0;
 let fail = 0;
@@ -156,18 +160,28 @@ async function main() {
   );
 
   console.log("--- fail-closed request authentication ---");
-  __resetNonceStore();
+  const nonceStore = createInMemoryNonceStore();
+  const consumeNonce = nonceStore.consume;
   const secret = Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString("hex");
+  const keyId = "selftest";
   const path = "/api/public/signer/selftest";
   const body = JSON.stringify({ probe: true });
 
-  const sign = (opts?: { ts?: string; nonce?: string; body?: string; secret?: string }) => {
+  const sign = (opts?: {
+    ts?: string;
+    nonce?: string;
+    body?: string;
+    secret?: string;
+    keyId?: string;
+    signedKeyId?: string;
+  }) => {
     const ts = opts?.ts ?? String(Date.now());
     const nonce = opts?.nonce ?? newNonce();
     const payload = opts?.body ?? body;
     const signature = signCanonical(
       opts?.secret ?? secret,
       canonicalString({
+        keyId: opts?.signedKeyId ?? opts?.keyId ?? keyId,
         method: "POST",
         path,
         timestamp: ts,
@@ -180,101 +194,121 @@ async function main() {
         [HEADER_TIMESTAMP]: ts,
         [HEADER_NONCE]: nonce,
         [HEADER_SIGNATURE]: signature,
-        [HEADER_KEY_ID]: "selftest",
+        [HEADER_KEY_ID]: opts?.keyId ?? keyId,
       }),
       rawBody: payload,
     };
   };
   const verify = (
     req: { headers: Headers; rawBody: string },
-    secretOverride?: string | undefined,
+    overrides?: {
+      secret?: string | undefined;
+      expectedKeyId?: string | undefined;
+      consumeNonce?: NonceConsumer | null;
+      method?: string;
+      path?: string;
+      rawBody?: string;
+    },
   ) =>
     verifySignerRequest({
-      method: "POST",
-      path,
+      method: overrides?.method ?? "POST",
+      path: overrides?.path ?? path,
       headers: req.headers,
-      rawBody: req.rawBody,
-      secret: secretOverride === undefined ? secret : secretOverride,
+      rawBody: overrides?.rawBody ?? req.rawBody,
+      secret: overrides && "secret" in overrides ? overrides.secret : secret,
+      expectedKeyId:
+        overrides && "expectedKeyId" in overrides ? overrides.expectedKeyId : keyId,
+      consumeNonce:
+        overrides && "consumeNonce" in overrides ? overrides.consumeNonce : consumeNonce,
     });
 
   const good = sign();
-  check("valid signed request accepted", verify(good).ok);
-  const replay = verify(good);
+  check("valid signed request accepted", (await verify(good)).ok);
+  const replay = await verify(good);
   check("replayed nonce rejected", !replay.ok && replay.reason === "replayed_nonce");
 
-  const noSecret = verifySignerRequest({
-    method: "POST",
-    path,
-    headers: sign().headers,
-    rawBody: body,
-    secret: undefined,
-  });
+  const noSecret = await verify(sign(), { secret: undefined });
   check("missing caller secret rejects", !noSecret.ok && noSecret.reason === "secret_unavailable");
 
-  const shortSecret = verifySignerRequest({
-    method: "POST",
-    path,
-    headers: sign().headers,
-    rawBody: body,
-    secret: "tooshort",
-  });
+  const shortSecret = await verify(sign(), { secret: "tooshort" });
   check("short secret rejects", !shortSecret.ok && shortSecret.reason === "secret_unavailable");
 
+  const noKeyIdConfigured = await verify(sign(), { expectedKeyId: undefined });
+  check(
+    "missing configured expected key ID rejects",
+    !noKeyIdConfigured.ok && noKeyIdConfigured.reason === "config_unavailable",
+  );
+
+  const substitutedKeyId = await verify(sign({ keyId: "attacker-key" }));
+  check(
+    "caller-supplied key ID differing from expected rejected",
+    !substitutedKeyId.ok && substitutedKeyId.reason === "unknown_key_id",
+  );
+
+  const keyIdNotBound = await verify(sign({ signedKeyId: "other-key" }));
+  check(
+    "expected key ID bound into HMAC canonical input",
+    !keyIdNotBound.ok && keyIdNotBound.reason === "bad_signature",
+  );
+
+  const noStore = await verify(sign(), { consumeNonce: null });
+  check(
+    "missing durable nonce store rejects (no in-memory fallback)",
+    !noStore.ok && noStore.reason === "nonce_store_unavailable",
+  );
+
+  const storeOutage = await verify(sign(), { consumeNonce: createFailingNonceStore() });
+  check(
+    "nonce store outage fails closed",
+    !storeOutage.ok && storeOutage.reason === "nonce_store_unavailable",
+  );
+
+  const concurrentNonce = newNonce();
+  const concurrentAttempts = await Promise.all([
+    verify(sign({ nonce: concurrentNonce })),
+    verify(sign({ nonce: concurrentNonce })),
+    verify(sign({ nonce: concurrentNonce })),
+  ]);
+  check(
+    "concurrent same-nonce attempts accept exactly one",
+    concurrentAttempts.filter((r) => r.ok).length === 1 &&
+      concurrentAttempts
+        .filter((r) => !r.ok)
+        .every((r) => !r.ok && r.reason === "replayed_nonce"),
+  );
+
   const tamperedBody = sign();
-  const withOtherBody = { ...tamperedBody, rawBody: JSON.stringify({ probe: false }) };
-  const digestFail = verify(withOtherBody);
+  const digestFail = await verify(tamperedBody, {
+    rawBody: JSON.stringify({ probe: false }),
+  });
   check("body digest binding rejects altered body", !digestFail.ok);
 
-  const stale = verify(sign({ ts: String(Date.now() - 5 * 60_000) }));
+  const stale = await verify(sign({ ts: String(Date.now() - 5 * 60_000) }));
   check("stale timestamp rejected", !stale.ok && stale.reason === "stale_timestamp");
 
-  const future = verify(sign({ ts: String(Date.now() + 5 * 60_000) }));
+  const future = await verify(sign({ ts: String(Date.now() + 5 * 60_000) }));
   check("far-future timestamp rejected", !future.ok && future.reason === "stale_timestamp");
 
-  const wrongKey = verify(
+  const wrongKey = await verify(
     sign({
       secret: Buffer.from(webcrypto.getRandomValues(new Uint8Array(32))).toString("hex"),
     }),
   );
   check("wrong caller secret rejected", !wrongKey.ok && wrongKey.reason === "bad_signature");
 
-  const wrongPath = verifySignerRequest({
-    method: "POST",
-    path: "/api/public/signer/other",
-    headers: sign().headers,
-    rawBody: body,
-    secret,
-  });
+  const wrongPath = await verify(sign(), { path: "/api/public/signer/other" });
   check("path binding enforced", !wrongPath.ok && wrongPath.reason === "bad_signature");
 
-  const wrongMethod = verifySignerRequest({
-    method: "GET",
-    path,
-    headers: sign().headers,
-    rawBody: body,
-    secret,
-  });
+  const wrongMethod = await verify(sign(), { method: "GET" });
   check("method binding enforced", !wrongMethod.ok && wrongMethod.reason === "bad_signature");
 
-  const missingHeaders = verifySignerRequest({
-    method: "POST",
-    path,
-    headers: new Headers(),
-    rawBody: body,
-    secret,
-  });
+  const missingHeaders = await verify({ headers: new Headers(), rawBody: body });
   check(
     "missing auth headers rejected",
     !missingHeaders.ok && missingHeaders.reason === "malformed_request",
   );
 
-  const oversized = verifySignerRequest({
-    method: "POST",
-    path,
-    headers: sign().headers,
-    rawBody: "x".repeat(64 * 1024 + 1),
-    secret,
-  });
+  const oversized = await verify(sign(), { rawBody: "x".repeat(64 * 1024 + 1) });
   check("oversized body rejected", !oversized.ok && oversized.reason === "body_too_large");
 
   console.log(`\n${pass} passed, ${fail} failed`);
