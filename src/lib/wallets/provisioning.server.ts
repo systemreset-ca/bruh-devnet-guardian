@@ -35,7 +35,7 @@ import {
   validateApproval,
   type MembershipAuthorizer,
 } from "./authorization.server";
-import { parseWalletRecord } from "./wallet-record.server";
+import { InvalidWalletRecord, parseWalletRecord } from "./wallet-record.server";
 import {
   publicView,
   type WalletPublicView,
