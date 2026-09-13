@@ -140,13 +140,13 @@ export async function verifySignerRequest(input: {
 
   if (
     !/^[0-9]{10,16}$/.test(timestamp) ||
-    !/^[0-9a-f]{32,64}$/i.test(nonceHeader) ||
+    !/^[0-9a-f]{32,64}$/.test(nonceHeader) ||
     !/^[0-9a-f]{64}$/.test(signature) ||
     !KEY_ID_PATTERN.test(keyId)
   ) {
     return { ok: false, reason: "malformed_request" };
   }
-  const nonce = nonceHeader.toLowerCase();
+  const nonce = nonceHeader;
 
   // A caller-supplied key ID that differs from the configured expected one is
   // rejected outright, and the expected value is also bound into the HMAC.
