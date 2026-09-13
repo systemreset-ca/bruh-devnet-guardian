@@ -21,7 +21,6 @@ import {
   type VerifiedProvisionScope,
 } from "../src/lib/wallets/bridge-receiver.server";
 import { createEphemeralWrappingKey } from "../src/lib/custody/custody-vault.server";
-import { vaultFromInjection } from "../src/lib/wallets/wrapping-key.server";
 import { provisionVerifiedScope } from "../src/lib/wallets/provisioning.server";
 import { createInMemoryWalletStore } from "./support/wallet-fixtures";
 
@@ -305,7 +304,7 @@ async function respond(
 
 // ------------------------- bridge-verified approval into the real provisioning core
 {
-  const vault = vaultFromInjection({ key: await createEphemeralWrappingKey(), keyVersion: "bridge-test-v1" });
+  const vault = await createEphemeralWrappingKey("bridge-test-v1");
   const store = createInMemoryWalletStore();
   const core: BridgeReceiverDeps["provision"] = async (scope) => {
     const outcome = await provisionVerifiedScope({ scope, vault, store });
