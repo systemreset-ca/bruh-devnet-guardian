@@ -521,15 +521,17 @@ Source SHA before this commit: `db6217de3ba7674fd76fe799a5033816675c6489`.
 
 `SIGNER_DIAGNOSTIC_ENABLED` is stored as `"false"` in the secret manager
 (verified by name; value written as the literal `false`). The **already
-published** deployment still evaluated the old value 100 seconds after the
-change: repeated unauthenticated probes returned `401` (the auth denial) rather
-than the `404` the disabled path returns, over 10 polls at 10-second intervals.
+published** deployment still evaluated the old value after the change: an
+independent live unauthenticated POST returned `401`/`no-store` (the auth
+denial) rather than the `404` the disabled path returns, because server
+environment values are baked into the running deployment and the switch-off takes
+effect on the next publish. No caller credential was exposed by that check.
 
-Interpretation: server environment values are baked into the running deployment,
-so the switch-off takes effect on the next publish. Until Codex republishes, the
-diagnostic address remains reachable but still denies every request that is not
-a valid signed request with a fresh one-time token, and each such token is
-single-use. No caller credential was exposed by these polls.
+Codex is publishing the disabled configuration now. The agent will not poll
+the live address again. After publish, an unauthenticated POST to the
+diagnostic address should return `404`; the operator console already reports
+the probe as disabled at source/preview.
 
-Action for Codex: republish once so the stored `false` takes effect, then
-re-check that an unauthenticated POST to the diagnostic address returns `404`.
+No RPC, no broadcast, no funding, no wallet provisioning occurred. Source SHA
+before this commit: `db6217de3ba7674fd76fe799a5033816675c6489`; operator
+console and caveat updated at `23700cba01eb015d1d7849e258f0a40aa9db24d1`.

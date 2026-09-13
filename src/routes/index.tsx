@@ -78,8 +78,8 @@ const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string
   {
     name: "Diagnostic probe",
     tone: "warn",
-    state: "off at next publish",
-    note: "Switched off in the secure store immediately after the deployed evidence was captured. The live deployment still carries the previous setting until the next publish, and until then it denies every request without a valid single-use signed credential.",
+    state: "disabled at source; live pending publish",
+    note: "SIGNER_DIAGNOSTIC_ENABLED=false in source/preview. The public deployment still carries the previous enabled value until Codex republishes; an independent live unauthenticated POST returned 401/no-store before that publish. No caller credential was exposed.",
   },
   {
     name: "Third-party sign-in proof",
