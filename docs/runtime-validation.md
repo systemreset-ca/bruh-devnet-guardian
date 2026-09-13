@@ -309,3 +309,38 @@ Investigated on latest main:
 Still **not** verified: execution inside a deployed Worker runtime (nothing is
 deployed). No wallet/signing endpoints, caller secrets, wrapping keys, funds or
 mainnet exist.
+
+## V2 adapter/timing restoration (audit follow-up)
+
+The audit at GitHub `d522c00` was correct: at that commit the adapter still used
+`MIN_TTL_SECONDS=1`/`MAX_TTL_SECONDS=300` with a variable derived TTL, and the
+self-check suite had 41 checks without the near-expiry and fixed-retention
+assertions. An earlier report claiming 45 checks was inaccurate; that claim is
+withdrawn. Both requirements have now been (re)implemented on top of the applied
+Cloud update, and nothing was removed:
+
+- `src/lib/custody/nonce-store.server.ts`: requires `expiresAt - now === 300000`
+  exactly and always sends `p_ttl_seconds: 300`. Any other derived value throws
+  (fail closed) — no range, no clamping, no fallback.
+- `scripts/custody-selftest.ts`: added
+  - request with a 58 s old timestamp accepted (near the 60 s skew edge);
+  - the same nonce still rejected (`replayed_nonce`) while that timestamp is
+    still valid;
+  - the callback's requested retention is exactly 300000 ms (300 s);
+  - requested retention exceeds the 60 s timestamp window.
+
+### Actual results after restoration
+
+| Check | Result |
+| --- | --- |
+| Custody/auth CLI self-check | **45/45 PASS** (was 41) |
+| Typecheck | clean |
+| Worker bundle build | **PASS** (bundle only, not executed) |
+| Managed preview `/` | **HTTP 200** |
+
+Pre-existing suites are unchanged and still recorded above: SQL suite 35/35 and
+real parallel HTTP trials 18/18 were run against the applied V2 routine earlier
+in this session; they were not re-run in this restoration step, which touched
+only the adapter and the CLI suite. Local source SHA before this commit:
+`630061a`. Worker-runtime execution remains unverified; no wallet/signing
+endpoints, caller secrets, wrapping keys, funds or mainnet exist.
