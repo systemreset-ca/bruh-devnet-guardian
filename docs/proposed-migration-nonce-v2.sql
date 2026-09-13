@@ -1,5 +1,5 @@
--- PROPOSED — NOT APPLIED.
--- Awaiting the owner's source/test review before any Cloud application.
+-- APPLIED on 2026-09-13 as a new migration journal entry (V2, nonce-only).
+-- Kept here as the reviewed source of record; the original migration is preserved.
 --
 -- Aligns public.consume_signer_nonce with the verifier and hardens ACLs:
 --   1. Fixed retention: any ttl_seconds other than 300 is rejected. A shorter
