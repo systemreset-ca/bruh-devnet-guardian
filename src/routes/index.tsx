@@ -84,9 +84,9 @@ const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string
 
   {
     name: "Diagnostic probe",
-    tone: "ok",
-    state: "disabled (live confirmed)",
-    note: "The switch is off in source and in the published deployment: an independent live request to the diagnostic address returned 404 with no-store. No caller credential was ever exposed.",
+    tone: "warn",
+    state: "temporarily switched on for one reviewed read-only check",
+    note: "The switch was previously off and independently confirmed off on the live deployment. It has now been turned on for a single reviewed read-only network check, and it takes effect live only after the next publish. It will be turned off again immediately after that evidence is captured. No caller credential was ever exposed.",
   },
   {
     name: "Third-party sign-in proof",
