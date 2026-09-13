@@ -516,3 +516,20 @@ proof and deployed-runtime proof as separate rows, plus the disabled diagnostic
 and the fixtures-only status of third-party sign-in verification.
 
 Source SHA before this commit: `db6217de3ba7674fd76fe799a5033816675c6489`.
+
+### Kill-switch propagation caveat (accurate live state)
+
+`SIGNER_DIAGNOSTIC_ENABLED` is stored as `"false"` in the secret manager
+(verified by name; value written as the literal `false`). The **already
+published** deployment still evaluated the old value 100 seconds after the
+change: repeated unauthenticated probes returned `401` (the auth denial) rather
+than the `404` the disabled path returns, over 10 polls at 10-second intervals.
+
+Interpretation: server environment values are baked into the running deployment,
+so the switch-off takes effect on the next publish. Until Codex republishes, the
+diagnostic address remains reachable but still denies every request that is not
+a valid signed request with a fresh one-time token, and each such token is
+single-use. No caller credential was exposed by these polls.
+
+Action for Codex: republish once so the stored `false` takes effect, then
+re-check that an unauthenticated POST to the diagnostic address returns `404`.
