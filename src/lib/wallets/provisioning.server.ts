@@ -35,6 +35,7 @@ import {
   validateApproval,
   type MembershipAuthorizer,
 } from "./authorization.server";
+import { parseWalletRecord } from "./wallet-record.server";
 import {
   publicView,
   type WalletPublicView,
@@ -45,6 +46,7 @@ import {
 
 export type ProvisionFailure =
   | "provisioning_disabled"
+  | "method_not_allowed"
   | "unauthorized"
   | "malformed_request"
   | "initdata_rejected"
@@ -52,11 +54,14 @@ export type ProvisionFailure =
   | "not_authorized_member"
   | "wrapping_key_unavailable"
   | "store_unavailable"
+  | "inconsistent_mapping"
+  | "store_record_invalid"
   | "store_error";
 
 export type ProvisionOutcome =
   | { ok: true; created: boolean; wallet: WalletPublicView }
   | { ok: false; reason: ProvisionFailure };
+
 
 const TELEGRAM_CHAT_ID = /^-?[0-9]{1,20}$/;
 const ALLOWED_BODY_KEYS = ["telegram_init_data", "telegram_chat_id"] as const;
