@@ -308,6 +308,13 @@ async function main() {
     !missingHeaders.ok && missingHeaders.reason === "malformed_request",
   );
 
+  const uppercaseNonce = sign({ nonce: newNonce().toUpperCase() });
+  const upperNonce = await verify(uppercaseNonce);
+  check(
+    "uppercase nonce rejected (verifier does not normalize)",
+    !upperNonce.ok && upperNonce.reason === "malformed_request",
+  );
+
   const oversized = await verify(sign(), { rawBody: "x".repeat(64 * 1024 + 1) });
   check("oversized body rejected", !oversized.ok && oversized.reason === "body_too_large");
 
