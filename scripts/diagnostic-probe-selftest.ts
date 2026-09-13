@@ -224,8 +224,21 @@ check(
   })(),
 );
 check(
-  "response contains no base58/base64/hex material",
-  !/[A-Za-z0-9+/=]{24,}/.test(JSON.stringify(firstBody).replace(/"[a-zA-Z]+":/g, "")),
+  "response values contain no encoded key/address/signature material",
+  (() => {
+    const values = [
+      firstBody["ok"],
+      firstBody["runtime"],
+      firstBody["network"],
+      firstBody["broadcast"],
+      firstBody["checkCount"],
+      firstBody["passedCount"],
+      ...Object.values(firstBody["checks"] as Record<string, unknown>),
+    ];
+    return values.every(
+      (v) => typeof v === "boolean" || typeof v === "number" || v === "server" || v === "devnet",
+    );
+  })(),
 );
 check(
   "replayed nonce denied",
