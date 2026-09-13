@@ -193,7 +193,13 @@ async function verify(input: {
     signRefused = true;
   }
   check("a payload above 8 KiB cannot be signed", signRefused);
-  check("a payload above 8 KiB cannot be verified", !(await verify({ rawBody: big })));
+  check(
+    "a payload above 8 KiB cannot be verified",
+    !(await verify({
+      rawBody: big,
+      headers: signBridgeRequest({ secret: SECRET, keyId: KEY_ID, path: PROVISION, rawBody: PAYLOAD, now: NOW }),
+    })),
+  );
   const atCap = JSON.stringify({ version: 1, pad: "x".repeat(8192 - 40) }).slice(0, 8192);
   check("a payload exactly at the cap is allowed by the transport", await verify({ rawBody: atCap }));
   const shape = Object.keys(JSON.parse(PAYLOAD) as Record<string, unknown>).sort().join(",");
