@@ -534,4 +534,4 @@ the probe as disabled at source/preview.
 
 No RPC, no broadcast, no funding, no wallet provisioning occurred. Source SHA
 before this commit: `db6217de3ba7674fd76fe799a5033816675c6489`; operator
-console and caveat updated at `2fb97de9d61a2b8d4b1093d785dab7fcc92e7da5`.
+console and caveat updated at `23700cba01eb015d1d7849e258f0a40aa9db24d1`.
