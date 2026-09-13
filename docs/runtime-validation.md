@@ -344,3 +344,44 @@ in this session; they were not re-run in this restoration step, which touched
 only the adapter and the CLI suite. Local source SHA before this commit:
 `630061a`. Worker-runtime execution remains unverified; no wallet/signing
 endpoints, caller secrets, wrapping keys, funds or mainnet exist.
+
+## Telegram third-party initData verification (source-only slice, 2026-09-13)
+
+Module: `src/lib/telegram/init-data.server.ts` (server-only, no HTTP route).
+Reference: https://core.telegram.org/bots/webapps#validating-data-for-third-party-use
+
+- Ed25519 third-party path only; **no bot token** is used or required.
+- Pinned in server config, never accepted from a request: bot ID `8763268934`
+  (@BRUHLegendsBot) and Telegram production public key
+  `e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d`.
+- Canonical string: `"<bot_id>:WebAppData\n"` + all received fields except
+  `hash` and `signature`, sorted by key, `key=value` joined with `\n`.
+  Signature is base64url Ed25519 over that string.
+- Rejections: duplicate parameters, missing/malformed signature, malformed
+  `auth_date`, malformed/non-numeric user ID, stale payloads (default 300 s),
+  future payloads (> 60 s skew), payloads over 4096 bytes, empty/malformed
+  query strings, and invalid pinned config.
+- `initDataUnsafe` is not trusted (only the raw signed query string is parsed).
+  No group/channel membership and no Telegram 2FA state is inferred.
+- Nothing is logged: no initData, signatures, user payloads or key material.
+
+### Evidence classification (important)
+
+- CLI suite `scripts/telegram-initdata-selftest.ts`: **27/27 PASS**.
+- Every accepted case uses a **generic, locally generated Ed25519 test key**,
+  verified against that same generated key. This proves canonical-string
+  construction, bot binding and rejection logic only.
+- **No real Telegram signature and no real Telegram account has been verified.**
+  Valid live initData is not available yet. The production key and bot ID are
+  asserted as pinned constants, and a generated-key fixture is confirmed to be
+  REJECTED against the production key.
+
+### Other suites re-run in this slice
+
+- Custody/auth self-check: 45/45 PASS.
+- SDK compatibility smoke: 9/9 PASS (network=devnet, broadcast=false).
+- Typecheck: clean. Worker bundle build: PASS (283 ms).
+- Local source SHA before this commit: `57d8689`.
+
+No public endpoint, credentials, caller secrets, wrapping keys, wallet schema,
+funding or mainnet were added in this slice.
