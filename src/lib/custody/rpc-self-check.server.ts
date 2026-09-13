@@ -88,6 +88,11 @@ export async function runReadOnlyRpcSelfCheck(
 
   let calls = 0;
   const requested: string[] = [];
+  // Bounded metadata only: statuses as numbers, failure classes as booleans.
+  const statuses: number[] = [];
+  let httpErrorCount = 0;
+  let timedOut = false;
+  let transportFailed = false;
   const countingTransport: typeof fetch = async (input, init) => {
     calls += 1;
     let method = "";
@@ -103,7 +108,19 @@ export async function runReadOnlyRpcSelfCheck(
       checks["noBroadcastAttempted"] = false;
       throw new Error("Read-only diagnostic refuses non-read RPC method.");
     }
-    return transport(input, init);
+    try {
+      const response = await transport(input, init);
+      statuses.push(response.status);
+      if (!response.ok) httpErrorCount += 1;
+      return response;
+    } catch (error) {
+      // Only the failure CLASS is recorded — never the error message or body.
+      const name =
+        error && typeof error === "object" && "name" in error ? String(error["name"]) : "";
+      if (name === "AbortError" || name === "TimeoutError") timedOut = true;
+      else transportFailed = true;
+      throw new Error("Custody RPC transport failure.");
+    }
   };
 
   // Seeds are held locally so the input buffers can actually be overwritten:
