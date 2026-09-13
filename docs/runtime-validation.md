@@ -845,3 +845,59 @@ suites come from local mock transports, and the single real read-only devnet
 prepare ran in a local Node environment. Deployed-runtime RPC evidence can only
 be claimed after the published run of the live probe. No wallet keys, no funds,
 no mainnet.
+
+## Live RPC diagnostic run on the deployed Worker (evidence: PARTIAL FAILURE)
+
+Reviewed and published source `6b05c0a773abc492cd44546a68eb56149a65e179`, with
+`SIGNER_DIAGNOSTIC_ENABLED="true"` for this bounded read-only test only. Probe:
+`scripts/live-rpc-diagnostic-probe.ts` against
+`https://bruh-devnet-guardian.lovable.app/api/public/signer/rpc-selftest`, using
+the injected diagnostic caller credentials (names only). No header, body,
+signature, nonce, secret or provider text was printed or logged. Exactly three
+requests were sent; no polling.
+
+Exact recorded output:
+
+- `unauthenticated_status=401` — unauthenticated live POST denied. PASS
+- `signed_status=200` — the signed request was served by the deployed Worker. PASS
+- `ok=false network=devnet readOnly=true broadcast=false rpcCalls=1 checks=3/10`
+- PASS `endpointPinnedHttps`
+- FAIL `onlyReadOnlyMethodsRequested`
+- FAIL `genesisIsDevnet`
+- FAIL `finalizedBlockhashObtained`
+- FAIL `blockHeightIsSafeInteger`
+- FAIL `messageFeeWithinReservedCap`
+- FAIL `draftFieldsPreserved`
+- FAIL `threeReadCallsOnly`
+- PASS `noBroadcastAttempted`
+- PASS `ephemeralInputSeedsCleared`
+- `replay_status=401` — byte-identical replay denied by the durable one-time
+  token store on the deployed runtime. PASS
+
+Interpretation, stated strictly:
+
+- PROVEN on the deployed Worker: the diagnostic route is reachable, the durable
+  fail-closed authentication accepts exactly one signed request and denies both
+  the unauthenticated request and the byte-identical replay; the endpoint is the
+  pinned HTTPS devnet endpoint; no broadcast was attempted; ephemeral input seeds
+  were cleared.
+- NOT PROVEN: deployed-Worker RPC capability. Only ONE outbound read was made
+  (`rpcCallCount=1`, expected 3) and the first read did not yield a devnet
+  genesis value, so blockhash, block height, message fee and draft-preservation
+  checks never ran. `onlyReadOnlyMethodsRequested` fails because fewer than the
+  three expected read methods were observed. Genuine Worker RPC proof requires
+  signed 200 with `ok=true`, all 10 checks and exactly 3 reads; that was NOT
+  obtained.
+- The failure is in the outbound network read from the deployed runtime, not in
+  auth, not in the endpoint pin, and not in any broadcast path. Root cause is not
+  yet diagnosed and must not be guessed; no value may be substituted from stored
+  records.
+
+`SIGNER_DIAGNOSTIC_ENABLED` was set back to `"false"` in the secret store
+immediately after this evidence was captured (name and literal value only; caller
+credentials never read or touched). Secret changes only take effect live after a
+republish, so the live endpoint still serves the enabled configuration until
+Codex publishes the disabled config. No further live polling was performed.
+
+No funding, airdrop, broadcast, wallet key, provisioning activation, schema
+application or mainnet was involved.
