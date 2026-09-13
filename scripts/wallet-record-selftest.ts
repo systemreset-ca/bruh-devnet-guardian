@@ -323,8 +323,84 @@ for (const [name, row] of badWinner) {
   const nonBoolean = await call(
     createRowInjectingWalletStore({ created: undefined as unknown as boolean, insert: record }),
   );
-  check("non-true created flag is treated as not-created", nonBoolean.ok === true && nonBoolean.created === true);
+  check(
+    "a created flag that is not a boolean fails closed (never a silent false)",
+    !nonBoolean.ok && nonBoolean.reason === "store_record_invalid",
+  );
 }
+
+// ------------------- authenticated decryption before any address is exposed
+{
+  // Syntactically perfect 48-byte ciphertext: same length, canonical base64,
+  // one flipped byte. Structure alone cannot detect it; only unsealing can.
+  const raw = Buffer.from(envelope.encryptedSeed, "base64");
+  raw[7] = raw[7]! ^ 0xff;
+  const tampered = { ...envelope, encryptedSeed: raw.toString("base64") };
+  const tamperedRecord = { ...record, envelope: tampered };
+  const found = await call(createRowInjectingWalletStore({ find: tamperedRecord }));
+  check(
+    "tampered 48-byte ciphertext on a stored row fails closed",
+    !found.ok && found.reason === "envelope_authentication_failed",
+  );
+  const winner = await call(createRowInjectingWalletStore({ insert: tamperedRecord, created: false }));
+  check(
+    "tampered 48-byte ciphertext on a race-winning row fails closed",
+    !winner.ok && winner.reason === "envelope_authentication_failed",
+  );
+}
+{
+  // Substituted deposit address, consistent between row and envelope, so every
+  // structural check passes. The unsealed seed no longer derives it.
+  const substituted = bs58.encode(new Uint8Array(32).fill(9));
+  const swapped = {
+    ...record,
+    address: substituted,
+    envelope: { ...envelope, address: substituted },
+  };
+  const found = await call(createRowInjectingWalletStore({ find: swapped }));
+  check(
+    "substituted address on a stored row fails closed (no deposit misdirection)",
+    !found.ok && found.reason === "envelope_authentication_failed",
+  );
+  const winner = await call(createRowInjectingWalletStore({ insert: swapped, created: false }));
+  check(
+    "substituted address on a race-winning row fails closed",
+    !winner.ok && winner.reason === "envelope_authentication_failed",
+  );
+}
+{
+  // A genuinely sealed, scope-valid row that is NOT the candidate just written.
+  const otherWalletId = randomUUID();
+  const otherEnvelope = await vault.provision({
+    walletId: otherWalletId,
+    groupId: scope.groupId,
+    membershipId: scope.membershipId,
+    network: "devnet",
+  });
+  const otherRecord = {
+    walletId: otherWalletId,
+    scope,
+    address: otherEnvelope.address,
+    wrappingKeyVersion: otherEnvelope.wrappingKeyVersion,
+    frozen: true as const,
+    envelope: otherEnvelope,
+  };
+  const claimed = await call(
+    createRowInjectingWalletStore({ insert: otherRecord, created: true }),
+  );
+  check(
+    "created=true with a row that is not the exact candidate fails closed",
+    !claimed.ok && claimed.reason === "store_record_invalid",
+  );
+  const asExisting = await call(
+    createRowInjectingWalletStore({ insert: otherRecord, created: false }),
+  );
+  check(
+    "the same row reported as pre-existing is accepted after authentication",
+    asExisting.ok === true && asExisting.created === false,
+  );
+}
+
 
 // --------------------------------------------- one wallet per Telegram identity
 {
