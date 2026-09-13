@@ -219,6 +219,7 @@ export async function runReadOnlyRpcSelfCheck(
       httpErrorCount,
       timedOut,
       transportFailed,
+      illegalInvocation,
       classification,
     },
   };
