@@ -143,6 +143,47 @@ BEGIN
   VALUES ('routine_is_security_definer',
           (SELECT prosecdef FROM pg_proc WHERE oid = 'public.consume_signer_nonce(text,text,integer)'::regprocedure), 'ACL');
 
+  -- Retention must outlive the verifier's 60-second timestamp window: with only
+  -- 2 seconds of that window left, the nonce row must still be live and the
+  -- replay must be refused.
+  PERFORM public.consume_signer_nonce('signer.key-tst', 'cafebabecafebabecafebabecafebabe', 300);
+  INSERT INTO signer_nonce_test_results (test, pass, note)
+  SELECT 'replay_rejected_with_2s_of_window_left',
+         sn.expires_at > now() + interval '58 seconds'
+           AND public.consume_signer_nonce('signer.key-tst', 'cafebabecafebabecafebabecafebabe', 300) IS FALSE,
+         'fixed 300s retention'
+    FROM public.signer_nonces sn
+   WHERE sn.key_id = 'signer.key-tst' AND sn.nonce = 'cafebabecafebabecafebabecafebabe';
+
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer.key-tst', 'deadbeefdeadbeefdeadbeefdeadbeef', 60);
+  EXCEPTION WHEN others THEN v_pass := true; END;
+  INSERT INTO signer_nonce_test_results (test, pass, note) VALUES ('reject_ttl_60', v_pass, 'only 300 accepted');
+
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer.key-tst', 'deadbeefdeadbeefdeadbeefdeadbee1', 299);
+  EXCEPTION WHEN others THEN v_pass := true; END;
+  INSERT INTO signer_nonce_test_results (test, pass, note) VALUES ('reject_ttl_299', v_pass, 'only 300 accepted');
+
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer.key-tst', 'deadbeefdeadbeefdeadbeefdeadbee2', 301);
+  EXCEPTION WHEN others THEN v_pass := true; END;
+  INSERT INTO signer_nonce_test_results (test, pass, note) VALUES ('reject_ttl_301', v_pass, 'only 300 accepted');
+
+  INSERT INTO signer_nonce_test_results (test, pass, note)
+  VALUES ('public_role_has_no_table_privileges',
+          NOT (has_table_privilege('public', 'public.signer_nonces', 'SELECT')
+            OR has_table_privilege('public', 'public.signer_nonces', 'INSERT')
+            OR has_table_privilege('public', 'public.signer_nonces', 'UPDATE')
+            OR has_table_privilege('public', 'public.signer_nonces', 'DELETE')), 'ACL');
+
+  INSERT INTO signer_nonce_test_results (test, pass, note)
+  VALUES ('public_role_cannot_execute_routine',
+          NOT has_function_privilege('public', 'public.consume_signer_nonce(text,text,integer)', 'EXECUTE'), 'ACL');
+
+  INSERT INTO signer_nonce_test_results (test, pass, note)
+  VALUES ('routine_search_path_is_pg_catalog',
+          (SELECT 'search_path=pg_catalog' = ANY (coalesce(proconfig, ARRAY[]::text[]))
+             FROM pg_proc WHERE oid = 'public.consume_signer_nonce(text,text,integer)'::regprocedure),
+          'no pg_temp shadowing');
+
   -- clean up test rows
   DELETE FROM public.signer_nonces WHERE key_id IN ('signer.key-tst', 'signer.key-cln', 'signer.key-cnc');
 END $$;
