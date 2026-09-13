@@ -12,4 +12,19 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  vite: {
+    resolve: {
+      alias: [
+        // @solana/web3.js 1.x statically imports `rpc-websockets`, whose package
+        // exports resolve only under node/browser conditions — not the worker
+        // runtime, which fails the production build. The signer never opens a
+        // websocket subscription, so point it at the WebSocket-standard browser
+        // build, which the worker runtime resolves and bundles cleanly.
+        {
+          find: /^rpc-websockets$/,
+          replacement: "rpc-websockets/dist/index.browser.mjs",
+        },
+      ],
+    },
+  },
 });
