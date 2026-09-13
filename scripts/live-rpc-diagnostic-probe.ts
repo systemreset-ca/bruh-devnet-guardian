@@ -123,6 +123,14 @@ console.log(
     `broadcast=${String(report.broadcast)} rpcCalls=${String(report.rpcCallCount)} ` +
     `checks=${String(report.passedCount)}/${String(report.checkCount)}`,
 );
+// Bounded transport metadata: numeric statuses and failure-class booleans only.
+const meta = report.transport ?? {};
+console.log(
+  `transport classification=${String(meta.classification)} attempts=${String(meta.attemptCount)} ` +
+    `responses=${String(meta.responseCount)} statuses=${JSON.stringify(meta.statuses ?? [])} ` +
+    `httpErrors=${String(meta.httpErrorCount)} timedOut=${String(meta.timedOut)} ` +
+    `transportFailed=${String(meta.transportFailed)}`,
+);
 for (const [name, value] of Object.entries(report.checks ?? {})) {
   check(name, value === true);
 }
