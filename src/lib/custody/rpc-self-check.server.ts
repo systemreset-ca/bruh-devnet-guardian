@@ -126,6 +126,9 @@ export async function runReadOnlyRpcSelfCheck(
       // Only the failure CLASS is recorded — never the error message or body.
       const name =
         error && typeof error === "object" && "name" in error ? String(error["name"]) : "";
+      if (error instanceof TypeError && error.message === "Illegal invocation") {
+        illegalInvocation = true;
+      }
       if (name === "AbortError" || name === "TimeoutError") timedOut = true;
       else transportFailed = true;
       throw new Error("Custody RPC transport failure.");
