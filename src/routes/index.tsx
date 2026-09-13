@@ -62,6 +62,33 @@ const posture: { name: string; value: string }[] = [
   { name: "External secret scopes", value: "not linked" },
 ];
 
+const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string }[] = [
+  {
+    name: "Local test-run proof (CLI)",
+    tone: "ok",
+    state: "verified",
+    note: "Envelope, transfer-signing, request-auth, one-time-token and third-party sign-in suites run in the local test runner only. This is not evidence about the deployed runtime.",
+  },
+  {
+    name: "Deployed runtime proof (Worker)",
+    tone: "ok",
+    state: "verified",
+    note: "An authenticated diagnostic request executed on the deployed runtime and returned booleans only: envelope, scope-binding, tamper rejection and offline transfer signing all held. Unauthenticated and replayed requests were denied there.",
+  },
+  {
+    name: "Diagnostic probe",
+    tone: "warn",
+    state: "disabled",
+    note: "Switched off immediately after the deployed evidence was captured; the diagnostic address now responds as absent.",
+  },
+  {
+    name: "Third-party sign-in proof",
+    tone: "warn",
+    state: "fixtures only",
+    note: "Accepted cases used locally generated test keys. No real live sign-in payload or real account has been verified.",
+  },
+];
+
 function OperatorStatus() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl px-5 py-14">
