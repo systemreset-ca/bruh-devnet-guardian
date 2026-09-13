@@ -535,3 +535,85 @@ the probe as disabled at source/preview.
 No RPC, no broadcast, no funding, no wallet provisioning occurred. Source SHA
 before this commit: `db6217de3ba7674fd76fe799a5033816675c6489`; operator
 console and caveat updated at `23700cba01eb015d1d7849e258f0a40aa9db24d1`.
+
+## Slice: persistent devnet wallet provisioning (SOURCE-ONLY, nothing applied)
+
+Scope of this slice: source, proposal and tests only. **Nothing was applied,
+deployed, enabled or funded.** No signing/provisioning HTTP route exists, no
+production wrapping key exists, no user funds and no mainnet.
+
+### Live state after the diagnostic slice (independently confirmed by Codex)
+
+Codex republished the disabled configuration and independently verified a live
+POST to the diagnostic address returns `404` with `cache-control: no-store`.
+The diagnostic probe is disabled in the live deployment. Documentation-only
+PR2 is merged and present in the local history (`7e9d050`).
+
+### Source added (not wired to any route)
+
+- `src/lib/wallets/wallet-store.server.ts` — persistence port. Immutable scope
+  (`groupId`, `membershipId`, `telegramChatId`, `telegramUserId`,
+  `network: "devnet"`), `insertIfAbsent` is first-writer-wins,
+  `publicView()` returns public metadata only.
+  `getDurableWalletStore()` resolves to `null` — no durable table is applied,
+  so provisioning fails closed with `store_unavailable`. No in-memory fallback
+  in production code.
+- `src/lib/wallets/authorization.server.ts` — server-owned membership approval
+  callback. The verified `telegramUserId` comes from verified initData only;
+  approvals are re-bound to the verified user, the claimed chat and UUID-shaped
+  group/membership ids. `getProductionMembershipAuthorizer()` resolves to
+  `null` → `authorization_unavailable`. Group membership is never derived from
+  initData or from a client-selected group.
+- `src/lib/wallets/wrapping-key.server.ts` — wrapping keys enter only as an
+  explicit non-extractable `CryptoKey` injection with a key version.
+  `getProductionWrappingVault()` resolves to `null` →
+  `wrapping_key_unavailable`. No demo or fallback production key exists.
+- `src/lib/wallets/provisioning.server.ts` — enable gate defaults to false;
+  requires the durable HMAC verifier **and** pinned production Telegram
+  initData verification **and** the server-owned approval callback; generates
+  the keypair server-side; persists one wallet per scope; returns public
+  metadata only (`walletId`, `address`, `network`, `wrappingKeyVersion`,
+  `frozen`). Accounts are always persisted frozen. No deposits, signing,
+  broadcast, withdrawal, export or key import path exists.
+- `docs/proposed-migration-wallets.sql` — **proposed, unapplied.**
+
+### Test results (all run just now)
+
+| Suite | Result | Nature of proof |
+| --- | --- | --- |
+| `scripts/wallet-provisioning-selftest.ts` | **65/65 PASS** | Local Node, offline. Crypto/envelope, auth denial, body contract, authorization binding, idempotence |
+| `scripts/wallet-sql-pglite-test.ts` | **69/69 PASS** | Actual isolated PostgreSQL (in-process PGlite) running the proposed SQL verbatim |
+| `scripts/custody-selftest.ts` | 45/45 PASS | Local Node |
+| `scripts/telegram-initdata-selftest.ts` | 27/27 PASS | Local Node, generated-key fixtures only |
+| `scripts/nonce-adapter-boundary-test.ts` | 14/14 PASS | Local Node |
+| `scripts/sdk-smoke.ts` | 9/9 PASS | Local Node |
+| typecheck | clean | — |
+| `bun run build` | PASS (nitro cloudflare-module) | Worker **bundle** builds; not deployed-Worker execution |
+
+Provisioning coverage includes: envelope seal/round-trip under its own scope and
+rejection under a different scope; missing caller secret, missing durable nonce
+store, stale timestamp, body tampering and byte-identical replay all denied
+uniformly with nothing persisted; client-supplied wallet id, key version,
+envelope, seed material, group id and network all rejected as
+`malformed_request`; missing/erroring/denying authorization callback and
+approvals bound to a different user or chat rejected; 6 concurrent same-scope
+attempts create exactly **one** wallet with no orphaned second usable key;
+distinct scopes get distinct wallets and addresses.
+
+### Explicit limitations of this evidence
+
+- **Mock fixtures, not real proof.** Every accepted path uses a MOCK membership
+  approval callback and generated-key initData fixtures. These are **not** real
+  BRUH group membership proof and **not** real Telegram signatures. The default
+  (pinned production) verifier is separately asserted to reject the generated
+  fixture.
+- **PGlite is a single session.** Same-scope repeat attempts in the SQL suite
+  are sequential. Real multi-session concurrency against the applied routine
+  must be re-measured after the migration is applied, as was done for nonces.
+- **Missing production configuration is documented, not invented.** No
+  production wrapping key, no production membership authorization source and no
+  durable wallet table are configured; each path fails closed.
+- **Deployed-Worker execution of provisioning is unverified** — there is no
+  route and nothing is deployed.
+
+Source SHA before this commit: `ea89f4717cdc3815fef16e0b5bb61c016b93589b`.
