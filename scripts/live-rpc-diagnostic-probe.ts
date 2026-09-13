@@ -131,6 +131,18 @@ console.log(
     `httpErrors=${String(meta.httpErrorCount)} timedOut=${String(meta.timedOut)} ` +
     `transportFailed=${String(meta.transportFailed)}`,
 );
+check(
+  "transport metadata is bounded (numbers, booleans and one fixed label only)",
+  (Array.isArray(meta.statuses) ? meta.statuses : [null]).every((s) => typeof s === "number") &&
+    typeof meta.attemptCount === "number" &&
+    typeof meta.responseCount === "number" &&
+    typeof meta.httpErrorCount === "number" &&
+    typeof meta.timedOut === "boolean" &&
+    typeof meta.transportFailed === "boolean" &&
+    ["no_attempt", "responded", "http_error", "timeout", "transport_failure"].includes(
+      String(meta.classification),
+    ),
+);
 for (const [name, value] of Object.entries(report.checks ?? {})) {
   check(name, value === true);
 }
