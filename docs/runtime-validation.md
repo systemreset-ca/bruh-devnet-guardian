@@ -804,3 +804,44 @@ vault, so authenticated decryption is genuinely exercised. Purely structural
 synthetic envelopes (random padding) remain in the SQL/PGlite suite and in
 rejection cases only, and are explicitly NOT crypto proof. Membership approvals
 are mocks, not real BRUH proof. No real keys, funds, endpoints or mainnet.
+
+## Live RPC diagnostic preparation (source + configuration only)
+
+Codex reviewed the RPC diagnostic source at
+`61ce1c1e78118ab226c9fbee9f424ae5c07465b0`: pinned public devnet endpoint, three
+reads with a hard write-method deny, the existing durable one-time-token auth and
+body size cap, no funding, airdrop or broadcast.
+
+Changes in this slice:
+
+- Report field `ephemeralKeysZeroed` renamed to `ephemeralInputSeedsCleared`
+  (`src/lib/custody/rpc-self-check.server.ts`, `scripts/http-rpc-selftest.ts`).
+  It means exactly this: the seed buffers this module allocated as key input were
+  overwritten with zeros. It is NOT a claim that all key material is erased from
+  memory. JavaScript and the wallet SDK give no such guarantee — derived key
+  objects, internal SDK copies, string values and garbage-collected or relocated
+  buffers are outside this module's control. Clearing input seeds is
+  defence-in-depth, not proof of erasure.
+- New `scripts/live-rpc-diagnostic-probe.ts`: trusted live probe for
+  `/api/public/signer/rpc-selftest` using the already-injected diagnostic caller
+  credentials (`SIGNER_CALLER_SECRET`, `SIGNER_CALLER_KEY_ID`, names only). It
+  sends exactly three requests — unauthenticated (must be denied), one signed
+  request, and a byte-identical replay (must be denied by the durable one-time
+  token store). It prints only HTTP status, booleans and counts: never the
+  secret, key ID, signature, nonce, timestamp, any header, the body or provider
+  text. No polling loop.
+- `SIGNER_DIAGNOSTIC_ENABLED` set to `"true"` in the secret store for this
+  bounded read-only test only (name and literal value only; caller credentials
+  never read or touched). Secret changes only take effect live after a
+  republish; Codex publishes. The flag is to be set back to `"false"`
+  immediately after the live evidence is captured.
+
+Tests: RPC client 74/74, RPC diagnostic guards 49/49, custody 45/45, Telegram
+27/27, nonce boundary 14/14, crypto probe 28/28, wallet provisioning 67/67,
+wallet record 94/94, SDK smoke 9/9; `tsgo --noEmit` clean; `bun run build` PASS.
+
+Limitation: there is still NO deployed-Worker RPC proof. All RPC responses in the
+suites come from local mock transports, and the single real read-only devnet
+prepare ran in a local Node environment. Deployed-runtime RPC evidence can only
+be claimed after the published run of the live probe. No wallet keys, no funds,
+no mainnet.
