@@ -100,6 +100,13 @@ const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string
     state: "source only; not applied",
     note: "Provisioning logic and its storage proposal exist with tests, but nothing is applied, enabled or funded. Approval and wrapping-key sources are absent, so every request is refused. Accepted test cases used mock approvals, not real group membership proof.",
   },
+  {
+    name: "BRUH service connection",
+    tone: "warn",
+    state: "source only; switched off",
+    note: "The reviewed connection that lets the BRUH service ask for a frozen devnet wallet is in place and tested, but switched off by default and unconfigured, so every request is refused. The two services share only a public verification key — no shared or elevated secret. Sign-in checks used fixtures, not real accounts or real group membership.",
+  },
+
 
 ];
 
