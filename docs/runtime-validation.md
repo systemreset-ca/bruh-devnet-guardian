@@ -35,6 +35,32 @@ addons.
   transfer construction/signing (RPC, fee probing and broadcast deliberately
   excluded from this project's copy)
 
+## Validation scope — what has and has not been exercised
+
+These three are distinct and must not be conflated:
+
+1. **Local Node test runs — VERIFIED.** `scripts/sdk-smoke.ts` and
+   `scripts/custody-selftest.ts` execute under Node 22 (`bun`) on this machine.
+   All cryptography, envelope, transfer-construction and request-auth logic is
+   verified here only.
+2. **Worker bundle build — VERIFIED.** `bun run build` produces the
+   Cloudflare-style worker bundle successfully. This proves the modules bundle
+   and resolve for the worker target; it does **not** execute them.
+3. **Deployed Worker execution — NOT VERIFIED.** No code in this project has
+   been observed executing inside the actual Worker runtime. Attempts to
+   exercise the built bundle locally (`vite preview`, `wrangler dev`) did not
+   produce a usable result, and nothing is deployed. Therefore worker-runtime
+   behaviour of Web Crypto, the `rpc-websockets` stub path, and the fail-closed
+   auth path is **unproven**.
+
+Correction to an earlier report: an interrupted run had created a diagnostic
+HTTP route at `src/routes/api/public/signer/selftest.ts`, contrary to a report
+that claimed no endpoint existed. That route has been **removed**. Self-checks
+are CLI-only (`scripts/`); the project exposes no signer or diagnostic HTTP
+endpoint of any kind. Because no caller secret or key ID was ever configured,
+the route denied all access while it existed and no funded or signing operation
+occurred.
+
 ## Production build
 
 `bun run build` — **PASS**, built in 331 ms, nitro output generated
@@ -96,7 +122,8 @@ binding, missing headers, oversized body).
   request. Nonce store errors are never logged (they can carry request-derived
   material).
 - `src/lib/custody/nonce-store.server.ts` resolves the durable consumer and
-  currently returns `null`, so the diagnostic route rejects every request.
+  currently returns `null`, so any future authenticated caller is denied. No
+  durable store implementation and no test fallback exist.
 - The only in-memory nonce store lives in the test harness
   (`scripts/support/in-memory-nonce-store.ts`) and is never importable from
   production modules.
@@ -122,7 +149,11 @@ binding, missing headers, oversized body).
 - JavaScript cannot guarantee memory erasure; zeroing is defence-in-depth only.
 - Worker runtime excludes native addons, `child_process`, `sharp`-class
   packages, and file watching; only pure-JS / Web Crypto paths are usable.
-- The SDK smoke module is intentionally not exposed as an HTTP endpoint.
+- The self-check and SDK smoke modules are CLI-only; there is **no** HTTP route
+  in this project (`src/routes` contains only the root layout and the operator
+  status page).
+- Request authentication has never been exercised over real HTTP — only via
+  direct in-process calls in the CLI test suite.
 - **Real durable database integration is not deployed yet.** There is no nonce
   table, no schema and no durable store, so `getDurableNonceConsumer()` returns
   `null` and every authenticated request fails closed. Authentication cannot be
