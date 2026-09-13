@@ -369,7 +369,7 @@ for (const [name, raw] of [
   const dead: typeof fetch = async () => new Response("", { status: 503 });
   const report = await runReadOnlyRpcSelfCheck(dead);
   check("self-check fails closed when the provider is unavailable", report.ok === false);
-  check("unavailable provider still reports zeroed ephemeral keys", report.checks["ephemeralKeysZeroed"] === true);
+  check("unavailable provider still reports cleared ephemeral input seeds", report.checks["ephemeralInputSeedsCleared"] === true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
