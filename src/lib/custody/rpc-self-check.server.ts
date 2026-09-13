@@ -182,6 +182,15 @@ export async function runReadOnlyRpcSelfCheck(
 
   const entries = Object.entries(checks);
   const passedCount = entries.filter(([, value]) => value === true).length;
+  const classification: RpcTransportMetadata["classification"] = timedOut
+    ? "timeout"
+    : transportFailed
+      ? "transport_failure"
+      : httpErrorCount > 0
+        ? "http_error"
+        : statuses.length > 0
+          ? "responded"
+          : "no_attempt";
   return {
     ok: passedCount === entries.length,
     network: "devnet",
@@ -190,5 +199,14 @@ export async function runReadOnlyRpcSelfCheck(
     checkCount: entries.length,
     passedCount,
     checks,
+    transport: {
+      attemptCount: calls,
+      responseCount: statuses.length,
+      statuses,
+      httpErrorCount,
+      timedOut,
+      transportFailed,
+      classification,
+    },
   };
 }
