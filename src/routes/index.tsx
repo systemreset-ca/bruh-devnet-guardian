@@ -122,6 +122,26 @@ function OperatorStatus() {
         </dl>
       </section>
 
+      <section className="panel mt-6 p-5" aria-labelledby="evidence">
+        <h2 id="evidence" className="label-key">
+          Verification evidence
+        </h2>
+        <ul className="mt-4 divide-y divide-border">
+          {evidence.map((e) => (
+            <li key={e.name} className="py-3 first:pt-0 last:pb-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="console text-sm text-foreground">{e.name}</span>
+                <StatusBadge tone={e.tone}>{e.state}</StatusBadge>
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{e.note}</p>
+            </li>
+          ))}
+        </ul>
+        <p className="console mt-4 text-[0.6875rem] text-muted-foreground">
+          Local test-run proof and deployed-runtime proof are reported separately and never merged.
+        </p>
+      </section>
+
       <section className="panel mt-6 p-5" aria-labelledby="reference">
         <h2 id="reference" className="label-key">
           Reviewed source reference
