@@ -515,4 +515,4 @@ Operator console: a "Verification evidence" panel now reports local test-run
 proof and deployed-runtime proof as separate rows, plus the disabled diagnostic
 and the fixtures-only status of third-party sign-in verification.
 
-Source SHA before this commit: SEE BELOW.
+Source SHA before this commit: `db6217de3ba7674fd76fe799a5033816675c6489`.
