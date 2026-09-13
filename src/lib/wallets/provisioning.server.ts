@@ -186,6 +186,29 @@ export async function provisionDevnetWallet(input: {
   };
 
   const store = input.store;
+  const vault = input.vault;
+
+  /**
+   * Authenticated decryption gate. Structural validation alone cannot detect a
+   * substituted or corrupted 48-byte ciphertext, so no address is ever exposed
+   * before the envelope unseals under the wrapping key AND re-derives exactly
+   * that address. vault.validate unseals, verifies the address and zeroes the
+   * seed; nothing is signed and no seed leaves the vault.
+   */
+  async function authenticateEnvelope(record: WalletRecord): Promise<void> {
+    try {
+      await vault.validate(record.envelope, {
+        walletId: record.walletId,
+        groupId: record.scope.groupId,
+        membershipId: record.scope.membershipId,
+        network: "devnet",
+      });
+    } catch {
+      // Never log: the error can echo stored or request-derived values.
+      throw new EnvelopeAuthFailure();
+    }
+  }
+
   let validated: { created: boolean; record: WalletRecord };
   try {
     // Nothing a store returns is trusted: every row is re-parsed against this
@@ -193,6 +216,7 @@ export async function provisionDevnetWallet(input: {
     const existing = await store.findByScope(scope);
     if (existing !== null) {
       const record = parseWalletRecord(existing, scope);
+      await authenticateEnvelope(record);
       return { ok: true, created: false, wallet: publicView(record) };
     }
 
@@ -219,7 +243,7 @@ export async function provisionDevnetWallet(input: {
 
     // Server-generated identity; never client-supplied.
     const walletId = (input.newWalletId ?? randomUUID)();
-    const envelope = await input.vault.provision({
+    const envelope = await vault.provision({
       walletId,
       groupId: scope.groupId,
       membershipId: scope.membershipId,
@@ -237,12 +261,38 @@ export async function provisionDevnetWallet(input: {
     // candidate envelope is discarded unpersisted — no orphaned usable key, no
     // overwrite of an existing wallet.
     const result = await store.insertIfAbsent(candidate);
-    validated = {
-      created: result.created === true,
-      // The winning row is validated exactly like a pre-existing row.
-      record: parseWalletRecord(result.record, scope),
-    };
+    // A store that reports neither true nor false is malformed; never coerce an
+    // unknown flag into a silent "false".
+    if (typeof result.created !== "boolean") {
+      return { ok: false, reason: "store_record_invalid" };
+    }
+    // The winning row is validated exactly like a pre-existing row.
+    const record = parseWalletRecord(result.record, scope);
+    if (result.created === true) {
+      // A row claimed as newly created must be this exact candidate, not merely
+      // a scope-compatible row: identity, key version, address and every
+      // envelope field must match byte for byte.
+      const envelopeMatches =
+        Object.keys(candidate.envelope).length === Object.keys(record.envelope).length &&
+        (Object.keys(candidate.envelope) as (keyof typeof candidate.envelope)[]).every(
+          (key) => record.envelope[key] === candidate.envelope[key],
+        );
+      if (
+        record.walletId !== candidate.walletId ||
+        record.wrappingKeyVersion !== candidate.wrappingKeyVersion ||
+        record.address !== candidate.address ||
+        record.frozen !== true ||
+        !envelopeMatches
+      ) {
+        return { ok: false, reason: "store_record_invalid" };
+      }
+    }
+    await authenticateEnvelope(record);
+    validated = { created: result.created, record };
   } catch (error) {
+    if (error instanceof EnvelopeAuthFailure) {
+      return { ok: false, reason: "envelope_authentication_failed" };
+    }
     if (error instanceof InvalidWalletRecord) {
       return { ok: false, reason: "store_record_invalid" };
     }
@@ -250,4 +300,5 @@ export async function provisionDevnetWallet(input: {
   }
   return { ok: true, created: validated.created, wallet: publicView(validated.record) };
 }
+
 
