@@ -385,3 +385,57 @@ Reference: https://core.telegram.org/bots/webapps#validating-data-for-third-part
 
 No public endpoint, credentials, caller secrets, wrapping keys, wallet schema,
 funding or mainnet were added in this slice.
+
+## Authenticated runtime diagnostic probe — reintroduced (source-only, 2026-09-13)
+
+Purpose: allow validation of the crypto path inside the ACTUAL deployed Worker
+runtime before any funded integration. The earlier diagnostic was removed on
+purpose while authentication was incomplete; this reintroduction ships with
+complete durable-nonce authentication plus an explicit kill switch.
+
+Files:
+- `src/lib/custody/diagnostic-probe.server.ts` — all guards.
+- `src/routes/api/public/signer/selftest.ts` — POST-only route; reads per-request
+  server env and resolves the durable nonce consumer.
+- `scripts/diagnostic-probe-selftest.ts` — CLI guard suite.
+- `scripts/live-diagnostic-probe.ts` — trusted live probe (prints status and
+  booleans/counts only; never the secret, key ID, signature, nonce or headers).
+
+Guards:
+- POST only (GET/other → 405). Body streamed with a hard **1024-byte** cap and
+  must be exactly `{}`. No caller key, wallet, address or transaction input.
+- Denies (uniform opaque 401) when the caller secret, expected key ID or durable
+  nonce store is missing or erroring, and on stale, future, tampered,
+  wrong-key-ID, wrong-path or replayed requests.
+- Returns 404 (indistinguishable from a missing route) unless the kill switch is
+  exactly `"true"`.
+- Response body: `ok`, `runtime`, `network`, `broadcast:false`, `checkCount`,
+  `passedCount`, and a map of booleans. No address, ciphertext, seed, signature
+  or wire bytes. No RPC, broadcast or funding.
+- Nothing about the request is logged.
+
+Server secret names (values never in source, tools, chat or logs; no demo
+defaults):
+- `SIGNER_CALLER_SECRET` — generated as a cryptographically random 64-character
+  value by the platform secret manager; the value was never revealed to anyone,
+  including the agent.
+- `SIGNER_CALLER_KEY_ID` — non-secret identifier `devnet-diagnostic-probe`, bound
+  into the HMAC canonical string as the expected key ID.
+- `SIGNER_DIAGNOSTIC_ENABLED` — kill switch, currently `"true"`. **Set it to
+  `"false"` (or delete it) immediately after the live Worker evidence is
+  captured**; the route then returns 404 for everyone.
+
+Evidence:
+- Diagnostic probe guard suite: **28/28 PASS** (in-process, TEST-ONLY in-memory
+  nonce store and throwaway generated credentials).
+- Custody/auth self-check: 45/45 PASS. Telegram initData: 27/27 PASS.
+  SDK smoke: 9/9 PASS. Typecheck clean. Worker bundle build PASS.
+- Source SHA at this slice: `9394b31`.
+
+Still NOT verified: execution inside the deployed Worker runtime. Nothing has
+been published by the agent in this slice; publishing is Codex's step after
+review, after which `scripts/live-diagnostic-probe.ts` can be run with the
+injected secret.
+
+Scope: this slice authorizes diagnostic auth configuration only — no production
+wrapping keys, no wallet provisioning routes, no user funds, no mainnet.
