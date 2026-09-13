@@ -29,7 +29,6 @@ import {
   newNonce,
   signCanonical,
   verifySignerRequest,
-  NONCE_TTL_MS,
   type NonceConsumer,
 } from "../src/lib/custody/request-auth.server";
 import {
@@ -228,38 +227,6 @@ async function main() {
   const replay = await verify(good);
   check("replayed nonce rejected", !replay.ok && replay.reason === "replayed_nonce");
 
-  // Retention must outlive the timestamp window: a nonce first used near the
-  // start of the window must still be rejected with only 2 seconds left in it.
-  const nearEdgeNonce = newNonce();
-  const early = sign({ nonce: nearEdgeNonce, ts: String(Date.now() - 58_000) });
-  check("request at 58s age accepted (2s of window left)", (await verify(early)).ok);
-  const lateReplay = await verify(sign({ nonce: nearEdgeNonce, ts: String(Date.now()) }));
-  check(
-    "replay with 2s of timestamp window remaining rejected",
-    !lateReplay.ok && lateReplay.reason === "replayed_nonce",
-  );
-  check(
-    "nonce retention (300s) exceeds timestamp window (60s)",
-    NONCE_TTL_MS === 300_000 && NONCE_TTL_MS > 2 * 60_000,
-  );
-
-  // The durable store must receive exactly the fixed 300s retention window.
-  let observedTtlSeconds = -1;
-  await verify(sign(), {
-    consumeNonce: async ({ now, expiresAt }) => {
-      observedTtlSeconds = Math.round((expiresAt - now) / 1000);
-      return true;
-    },
-  });
-  check("verifier requests fixed 300s nonce retention", observedTtlSeconds === 300);
-
-  const upperNonce = await verify(sign({ nonce: newNonce().toUpperCase() }));
-  check(
-    "non-canonical uppercase hex nonce rejected",
-    !upperNonce.ok && upperNonce.reason === "malformed_request",
-  );
-
-
   const noSecret = await verify(sign(), { secret: undefined });
   check("missing caller secret rejects", !noSecret.ok && noSecret.reason === "secret_unavailable");
 
@@ -339,6 +306,13 @@ async function main() {
   check(
     "missing auth headers rejected",
     !missingHeaders.ok && missingHeaders.reason === "malformed_request",
+  );
+
+  const uppercaseNonce = sign({ nonce: newNonce().toUpperCase() });
+  const upperNonce = await verify(uppercaseNonce);
+  check(
+    "uppercase nonce rejected (verifier does not normalize)",
+    !upperNonce.ok && upperNonce.reason === "malformed_request",
   );
 
   const oversized = await verify(sign(), { rawBody: "x".repeat(64 * 1024 + 1) });

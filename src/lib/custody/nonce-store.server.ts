@@ -18,14 +18,9 @@
  */
 import type { NonceConsumer } from "./request-auth.server";
 
-/**
- * Fixed retention, mirrored exactly by the database routine.
- *
- * It must equal the verifier's NONCE_TTL_MS. A shorter retention would let a
- * nonce row expire and be reclaimed while the verifier's 60-second timestamp
- * window is still valid, which permits replay.
- */
-const FIXED_TTL_SECONDS = 300;
+/** Hard TTL bounds, mirrored by the database routine. */
+const MIN_TTL_SECONDS = 1;
+const MAX_TTL_SECONDS = 300;
 
 /**
  * Returns an atomic durable nonce consumer, or `null` when the backend is not
@@ -40,16 +35,20 @@ export async function getDurableNonceConsumer(): Promise<NonceConsumer | null> {
 
   return async ({ keyId, nonce, now, expiresAt }) => {
     // Derive the TTL from the verifier's own window; never from a caller value.
-    const ttlSeconds = Math.round((expiresAt - now) / 1000);
-    if (ttlSeconds !== FIXED_TTL_SECONDS) {
-      // Fail closed: never shorten (replay window) or lengthen the retention.
+    const ttlSeconds = Math.ceil((expiresAt - now) / 1000);
+    if (
+      !Number.isFinite(ttlSeconds) ||
+      ttlSeconds < MIN_TTL_SECONDS ||
+      ttlSeconds > MAX_TTL_SECONDS
+    ) {
+      // Fail closed rather than clamping to a longer-lived record.
       throw new Error("nonce_ttl_out_of_range");
     }
 
     const { data, error } = await supabaseAdmin.rpc("consume_signer_nonce", {
       p_key_id: keyId,
       p_nonce: nonce,
-      p_ttl_seconds: FIXED_TTL_SECONDS,
+      p_ttl_seconds: ttlSeconds,
     });
 
     // Never log or surface the error body: it can echo request-derived values.

@@ -31,7 +31,7 @@ BEGIN
     RAISE EXCEPTION 'invalid key id';
   END IF;
 
-  -- Canonical lowercase hex only; the verifier lowercases before calling.
+  -- Canonical lowercase hex only; the verifier rejects uppercase nonces.
   IF p_nonce IS NULL OR p_nonce !~ '^[0-9a-f]{32,64}$' THEN
     RAISE EXCEPTION 'invalid nonce';
   END IF;
@@ -61,7 +61,7 @@ BEGIN
     WHERE t.expires_at < v_now
   RETURNING true INTO v_first_use;
 
-  RETURN pg_catalog.coalesce(v_first_use, false);
+  RETURN COALESCE(v_first_use, false);
 END;
 $$;
 
