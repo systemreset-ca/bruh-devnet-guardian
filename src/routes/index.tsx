@@ -78,8 +78,8 @@ const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string
   {
     name: "Diagnostic probe",
     tone: "warn",
-    state: "disabled",
-    note: "Switched off immediately after the deployed evidence was captured; the diagnostic address now responds as absent.",
+    state: "off at next publish",
+    note: "Switched off in the secure store immediately after the deployed evidence was captured. The live deployment still carries the previous setting until the next publish, and until then it denies every request without a valid single-use signed credential.",
   },
   {
     name: "Third-party sign-in proof",
