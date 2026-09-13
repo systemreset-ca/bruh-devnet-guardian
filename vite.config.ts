@@ -16,14 +16,16 @@ export default defineConfig({
   vite: {
     resolve: {
       alias: [
-        // @solana/web3.js 1.x statically imports `rpc-websockets`, whose package
-        // exports resolve only under node/browser conditions — not the worker
-        // runtime, which fails the production build. The signer never opens a
-        // websocket subscription, so point it at the WebSocket-standard browser
-        // build, which the worker runtime resolves and bundles cleanly.
+        // @solana/web3.js 1.x statically imports `rpc-websockets` for
+        // Connection's subscriptions. Its package exports resolve only under
+        // node/browser conditions, so it cannot be bundled for the worker
+        // runtime and fails the production build. This signer never opens a
+        // subscription, so the import is satisfied with throwing stubs.
         {
           find: /^rpc-websockets$/,
-          replacement: "rpc-websockets/dist/index.browser.mjs",
+          replacement: fileURLToPath(
+            new URL("./src/lib/custody/rpc-websockets-unsupported.ts", import.meta.url),
+          ),
         },
       ],
     },
