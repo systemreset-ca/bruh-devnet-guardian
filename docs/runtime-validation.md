@@ -1043,3 +1043,52 @@ crypto probe 28/28, RPC diagnostic 51/51, RPC client 89/89, wallet provisioning
 
 Source SHA before this slice: 01d3311198fe0a5010d5dd166e975355adaaed47 (this
 slice auto-committed on top). Nothing was published by me.
+
+## Live RPC diagnostic — single bounded trial (FAILED at the transport)
+
+One attempt only, against the published deployment. Exactly three requests were
+sent; no polling. Nothing but status, counts, booleans and the bounded transport
+metadata was printed or recorded.
+
+Exact captured evidence:
+- `unauthenticated_status=401` — unauthenticated live POST denied.
+- `signed_status=200` — one signed request served.
+- `ok=false network=devnet readOnly=true broadcast=false rpcCalls=1 checks=3/10`
+- transport: `classification=transport_failure attempts=1 responses=0 statuses=[]
+  httpErrors=0 timedOut=false transportFailed=true`
+- passed: `endpointPinnedHttps`, `noBroadcastAttempted`,
+  `ephemeralInputSeedsCleared`, plus bounded-metadata, devnet and no-broadcast
+  assertions.
+- failed: `onlyReadOnlyMethodsRequested`, `genesisIsDevnet`,
+  `finalizedBlockhashObtained`, `blockHeightIsSafeInteger`,
+  `messageFeeWithinReservedCap`, `draftFieldsPreserved`, `threeReadCallsOnly`.
+- `replay_status=401` — byte-identical replay denied by the durable one-time
+  token store on the deployed runtime.
+
+PROVEN on the deployed runtime: the route is reachable, the durable fail-closed
+auth accepts exactly one signed request and denies both the unauthenticated
+request and the byte-identical replay, the endpoint is the pinned devnet HTTPS
+one, no broadcast was attempted, and the allocated seed buffers were cleared.
+
+NOT PROVEN: deployed-runtime RPC capability. Classified only from the safe
+metadata: one outbound attempt was made, zero responses were received, no HTTP
+status was ever observed, and the abort deadline did not fire —
+`classification=transport_failure`. No provider, network or configuration cause
+is claimed or inferred; no error text exists in this evidence and none was
+invented. `onlyReadOnlyMethodsRequested` and the remaining checks are false only
+because the read sequence aborted before they were evaluated, not because a
+write method was requested (`noBroadcastAttempted` stayed true and the
+transport wrapper hard-fails on any non-read method).
+
+`SIGNER_DIAGNOSTIC_ENABLED` set back to "false" immediately after this single
+attempt through the secure secret manager (name and literal value only; caller
+credentials never read or touched). It takes effect live only after Codex
+publishes the shutdown; no further live request was made.
+
+Unchanged: wallet bridge route disabled and unconfigured, no wallet enable flag,
+store, wrapping key, provisioning activation or schema application, no funds, no
+mainnet. Production policy callbacks remain absent and fail closed.
+
+Source SHA of the published deployment under test:
+6299faac295ca0367871dd54fe70501c16dcea2b (docs-only diff on top of the reviewed
+01d3311198fe0a5010d5dd166e975355adaaed47). This evidence is committed on top.
