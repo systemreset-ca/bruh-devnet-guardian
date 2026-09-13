@@ -78,8 +78,8 @@ const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string
   {
     name: "Network / on-chain reads",
     tone: "warn",
-    state: "request-only reader added; not proven on the deployed runtime",
-    note: "A reviewed request-only devnet reader now exists and never creates the wallet SDK connection object that this runtime cannot build. It checks the network fingerprint, takes a settled block reference and confirms the network charge stays inside the reserved allowance. One real read-only check passed in a local test environment; nothing has been proven on the deployed runtime, nothing is wired to wallets or the chat bot, and no send or broadcast path is reachable. No value may be substituted from stored records.",
+    state: "request-only reader ready for a live read-only check; not yet proven on the deployed runtime",
+    note: "A reviewed request-only devnet reader now exists and never creates the wallet SDK connection object that this runtime cannot build. It checks the network fingerprint, takes a settled block reference and confirms the network charge stays inside the reserved allowance. One real read-only check passed in a local test environment; a live read-only check is prepared and awaiting review and publish, so nothing has been proven on the deployed runtime yet, nothing is wired to wallets or the chat bot, and no send or broadcast path is reachable. No value may be substituted from stored records.",
   },
 
   {
