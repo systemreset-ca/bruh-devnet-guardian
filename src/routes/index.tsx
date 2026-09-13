@@ -72,14 +72,20 @@ const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string
   {
     name: "Deployed runtime proof (Worker)",
     tone: "ok",
-    state: "verified",
-    note: "An authenticated diagnostic request executed on the deployed runtime and returned booleans only: envelope, scope-binding, tamper rejection and offline transfer signing all held. Unauthenticated and replayed requests were denied there.",
+    state: "verified: offline only",
+    note: "An authenticated diagnostic request executed on the deployed runtime and returned booleans only: envelope, scope-binding, tamper rejection and offline transfer signing all held. Unauthenticated and replayed requests were denied there. This covers offline work only.",
+  },
+  {
+    name: "Network / on-chain reads",
+    tone: "warn",
+    state: "unsupported here",
+    note: "The wallet SDK's connection object cannot even be created in this runtime, because it always opens a subscription channel this build deliberately blocks. No network read, fee lookup or broadcast has ever been tested. A reviewed request-only adapter, proven on the deployed runtime, is required before any live-network use, and no value may be substituted from stored records.",
   },
   {
     name: "Diagnostic probe",
-    tone: "warn",
-    state: "disabled at source; live pending publish",
-    note: "SIGNER_DIAGNOSTIC_ENABLED=false in source/preview. The public deployment still carries the previous enabled value until Codex republishes; an independent live unauthenticated POST returned 401/no-store before that publish. No caller credential was exposed.",
+    tone: "ok",
+    state: "disabled (live confirmed)",
+    note: "The switch is off in source and in the published deployment: an independent live request to the diagnostic address returned 404 with no-store. No caller credential was ever exposed.",
   },
   {
     name: "Third-party sign-in proof",
@@ -87,6 +93,13 @@ const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string
     state: "fixtures only",
     note: "Accepted cases used locally generated test keys. No real live sign-in payload or real account has been verified.",
   },
+  {
+    name: "Wallet provisioning",
+    tone: "warn",
+    state: "source only; not applied",
+    note: "Provisioning logic and its storage proposal exist with tests, but nothing is applied, enabled or funded. Approval and wrapping-key sources are absent, so every request is refused. Accepted test cases used mock approvals, not real group membership proof.",
+  },
+
 ];
 
 function OperatorStatus() {

@@ -617,3 +617,37 @@ distinct scopes get distinct wallets and addresses.
   route and nothing is deployed.
 
 Source SHA before this commit: `ea89f4717cdc3815fef16e0b5bb61c016b93589b`.
+
+## Recorded runtime limitation: no RPC `Connection` support in this Worker build
+
+Not a change to provisioning scope; provisioning source/tests are complete and
+unchanged by this note.
+
+Finding: `src/lib/custody/rpc-websockets-unsupported.ts` throws from the
+`CommonClient` constructor. `@solana/web3.js` 1.98.4 constructs
+`RpcWebSocketClient` unconditionally inside the `Connection` constructor
+(original SDK `index.cjs.js` line 6104), so **even a fetch-only `Connection`
+cannot be constructed** in this Worker build — construction itself throws, not
+just subscription use.
+
+Consequences, stated precisely:
+
+- The deployed-Worker crypto evidence (signed diagnostic `200`, checks 9/9)
+  validates **offline** envelope sealing/unsealing, scope binding and offline
+  transaction signing and Ed25519 verification **only**. It does **not**
+  validate RPC `Connection` support, RPC reads, fee probing, broadcast or any
+  network path. No claim of tested RPC exists anywhere in this project.
+- The stub is deliberate and must not be silently weakened to make
+  `Connection` construct. Any future RPC path must be either a reviewed HTTP
+  JSON-RPC adapter (no WebSocket dependency) or a Worker-compatible WebSocket
+  dependency, and must be proven with **actual deployed-Worker tests** before
+  any funded or live-network use.
+- Until such an adapter exists and is tested in the deployed Worker, live
+  on-chain reads are unavailable in this signer, so no balance, holdings or
+  portfolio value may be reported from it. Nothing may be substituted from the
+  database.
+
+Cross-reference: Codex recorded the live disabled diagnostic (`404` with
+`cache-control: no-store`) and the signed crypto 9/9 evidence in the public
+BRUH draft PR 46 at `fe63b95b0b12a0a77efb99861bcb4e1ddd079834`. That repository
+is reference-only and was not modified.
