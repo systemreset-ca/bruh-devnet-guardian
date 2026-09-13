@@ -66,7 +66,7 @@ function identity(input: CustodyIdentity): CustodyIdentity {
 }
 
 /** Additional authenticated data binds each ciphertext to its full scope. */
-function aad(input: CustodyEnvelope, purpose: "seed" | "key"): Uint8Array {
+function aad(input: CustodyEnvelope, purpose: "seed" | "key"): Uint8Array<ArrayBuffer> {
   const scope = identity(input);
   if (
     input.version !== 1 ||
@@ -75,8 +75,9 @@ function aad(input: CustodyEnvelope, purpose: "seed" | "key"): Uint8Array {
   ) {
     throw new Error("Invalid custody envelope.");
   }
-  return new TextEncoder().encode(
-    JSON.stringify([
+  return Uint8Array.from(
+    new TextEncoder().encode(
+      JSON.stringify([
       "BRUH-custody-v1",
       purpose,
       scope.walletId,
