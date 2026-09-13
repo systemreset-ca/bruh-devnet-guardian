@@ -69,6 +69,9 @@ export async function handleRpcDiagnosticProbe(
       checkCount: report.checkCount,
       passedCount: report.passedCount,
       checks: report.checks,
+      // Bounded transport metadata: numeric statuses and failure-class booleans
+      // only. No body, headers, endpoint, key or provider error text.
+      transport: report.transport,
     },
     200,
   );
