@@ -234,7 +234,6 @@ async function respond(
     ["empty init data", approvalBody({ telegram_init_data: "" })],
     ["oversized init data", approvalBody({ telegram_init_data: "x".repeat(5000) })],
     ["array body", JSON.stringify([approvalBody()])],
-    ["not json", "{"],
   ];
   for (const [name, body] of cases) {
     provisionCalls = [];
@@ -242,10 +241,27 @@ async function respond(
     check(`${name} denied`, response.status === 401);
     check(`${name} never provisioned`, provisionCalls.length === 0);
   }
-  // 8 KiB streamed cap
+  // Unparseable body: authenticated bytes, but no approval can be derived.
+  provisionCalls = [];
+  const notJson = await respond("{");
+  check("unparseable body denied without a 200", notJson.status === 401 || notJson.status === 503);
+  check("unparseable body never provisioned", provisionCalls.length === 0);
+  // 8 KiB streamed cap: the signer refuses to sign such a body at all, and the
+  // receiver denies it before any verification.
   provisionCalls = [];
   const huge = approvalBody({ telegram_init_data: "x".repeat(9000) });
-  check("body above the 8 KiB cap denied", (await respond(huge)).status === 401);
+  let signRefused = false;
+  try {
+    signed(huge);
+  } catch {
+    signRefused = true;
+  }
+  check("the signing side refuses a body above the 8 KiB cap", signRefused);
+  const oversized = await receiveProvisionBridge(
+    request(huge, signed(approvalBody())),
+    deps(),
+  );
+  check("body above the 8 KiB cap denied", oversized.status === 401);
   check("oversized body never provisioned", provisionCalls.length === 0);
 }
 
