@@ -31,6 +31,27 @@ export const DIAGNOSTIC_RPC_ENDPOINT = "https://api.devnet.solana.com";
 const READ_ONLY_METHODS = new Set(["getGenesisHash", "getLatestBlockhash", "getFeeForMessage"]);
 const FEE_CAP_LAMPORTS = "100000";
 
+/**
+ * Strictly bounded transport metadata: numeric HTTP statuses and failure-class
+ * booleans only. It NEVER carries response text or body, headers, the endpoint,
+ * a provider key, or any provider error message — the HTTP adapter stays opaque.
+ */
+export interface RpcTransportMetadata {
+  attemptCount: number;
+  responseCount: number;
+  /** Numeric HTTP statuses in request order. No bodies, no headers. */
+  statuses: number[];
+  httpErrorCount: number;
+  timedOut: boolean;
+  transportFailed: boolean;
+  classification:
+    | "no_attempt"
+    | "responded"
+    | "http_error"
+    | "timeout"
+    | "transport_failure";
+}
+
 export interface RpcSelfCheckReport {
   ok: boolean;
   network: "devnet";
@@ -39,6 +60,7 @@ export interface RpcSelfCheckReport {
   checkCount: number;
   passedCount: number;
   checks: Record<string, boolean>;
+  transport: RpcTransportMetadata;
 }
 
 function uuid(): string {
