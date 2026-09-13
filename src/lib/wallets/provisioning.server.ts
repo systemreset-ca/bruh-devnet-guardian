@@ -27,7 +27,10 @@ import {
   verifySignerRequest,
   type NonceConsumer,
 } from "@/lib/custody/request-auth.server";
-import { verifyThirdPartyInitData } from "@/lib/telegram/init-data.server";
+import {
+  verifyThirdPartyInitData,
+  type InitDataResult,
+} from "@/lib/telegram/init-data.server";
 import {
   validateApproval,
   type MembershipAuthorizer,
@@ -110,6 +113,13 @@ export async function provisionDevnetWallet(input: {
   now?: number;
   /** Test seam only; the wallet UUID is always server-generated. */
   newWalletId?: () => string;
+  /**
+   * TEST-ONLY seam. Defaults to the pinned production verifier (real bot id and
+   * Telegram production public key). A test suite overrides it to exercise the
+   * downstream flow with generated-key fixtures, which the production default
+   * rejects.
+   */
+  verifyInitData?: (raw: unknown, options: { nowMs?: number }) => InitDataResult;
 }): Promise<ProvisionOutcome> {
   if (input.enabled !== true) return { ok: false, reason: "provisioning_disabled" };
 
