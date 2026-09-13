@@ -3,7 +3,9 @@
  *
  * Nothing here is applied, deployed, enabled or funded:
  *   - the wallet schema is a proposal (docs/proposed-migration-wallets.sql);
- *   - no HTTP route imports this module;
+ *   - the only HTTP route importing this module is the isolated signer bridge
+ *     route, which imports the shared `provisionVerifiedScope` core and is
+ *     itself default-disabled and unconfigured (404 before any dependency);
  *   - the enable gate defaults to false, every account is frozen, and there is
  *     no deposit, signing, broadcast, withdraw, export or mainnet path.
  *
