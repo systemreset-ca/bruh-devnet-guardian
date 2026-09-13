@@ -705,3 +705,63 @@ Limitations (unchanged and explicit):
   configured; both fail closed and are documented rather than invented.
 - Deployed-Worker evidence still covers offline crypto only; no RPC, no
   on-chain reads, no broadcast.
+
+## Source-only read-only devnet RPC slice
+
+Reference: Codex-reviewed public BRUH source `services/custody-signer/http-rpc.ts`
+at commit `6ca44ab5060a8250b7df77f28091898a89f5874f` (PR 46), reused with import
+names/paths adapted to this signer only; the reviewed logic is unchanged. That
+repository is NOT modified. Upstream evidence recorded there (161 BRUH tests,
+type/lint pass, exact-source CI run 34788104677 success, one Node public-devnet
+read-only prepare) belongs to that project and is cited, not re-claimed here.
+
+Added here:
+- `src/lib/custody/http-rpc.server.ts` — `DevnetHttpSolRpc`: no `Connection` and
+  no WebSocket construction, explicit server-owned HTTPS endpoint (no userinfo,
+  no hash, no redirects), devnet genesis pin, finalized blockhash and finalized
+  message fee, exact signed-byte re-derivation before any send, 5 second abort,
+  128 KiB streamed response cap, opaque provider errors, no automatic HTTP
+  retries. `broadcast`/`inspect` exist for source parity and are NOT wired to
+  wallets, provisioning, the bot or any diagnostic path.
+- `src/lib/custody/rpc-self-check.server.ts` — read-only self-check: exactly
+  three reads (getGenesisHash, getLatestBlockhash finalized, getFeeForMessage
+  finalized) against the pinned `https://api.devnet.solana.com`; ephemeral seeds
+  generated in memory and zeroed; a transport guard hard-fails if any non-read
+  method is ever attempted. Returns booleans and counts only. No provider key is
+  needed for these three calls.
+- `src/lib/custody/rpc-diagnostic.server.ts` and
+  `src/routes/api/public/signer/rpc-selftest.ts` — the same durable
+  HMAC + one-time-token auth, kill switch, empty-body contract and uniform
+  denials as the crypto diagnostic. No caller endpoint, client params, wallet,
+  address or transaction input. No funding, airdrop, sendTransaction or
+  broadcast. The diagnostic REMAINS DISABLED: `SIGNER_DIAGNOSTIC_ENABLED` is
+  still "false" and was not changed, and nothing was published by the agent.
+
+Test results (this build):
+- `scripts/http-rpc-selftest.ts` — 74/74 PASS (endpoint policy, genesis pinning,
+  finalized commitments, fee-cap boundary incl. exactly-at-cap, malformed
+  blockhash/fee/envelope rejection, id mismatch, error member, non-JSON body,
+  128 KiB cap, abort on a hanging provider, no retry on 500/429, opaque provider
+  errors, exact signed-byte binding and tamper rejection).
+- `scripts/rpc-diagnostic-selftest.ts` — 49/49 PASS (kill switch, POST only,
+  empty-body contract incl. rejection of client endpoint/commitment params,
+  incomplete config, missing/failing nonce store, header omissions, wrong
+  secret, key-ID substitution and unbound key ID, cross-path signature, stale
+  and future timestamps, replay denial, uniform opaque denials, and response
+  hygiene: no blockhash, no address-shaped string, no wire blob, no provider
+  host, pinned endpoint, read methods only).
+- Existing suites unchanged and green: custody/auth 45/45, Telegram 27/27, nonce
+  boundary 14/14, crypto probe guards 28/28, wallet provisioning 67/67, wallet
+  record 88/88, wallet SQL (PGlite) 164/164, SDK smoke 9/9.
+- `tsgo --noEmit` clean; `bun run build` PASS.
+
+Actual network evidence in THIS project:
+- One real read-only prepare from a local Node environment against public devnet
+  succeeded: genesis pinned to devnet, finalized blockhash and block height
+  obtained, message fee inside the reserved cap, exactly 3 RPC reads, zero
+  broadcast, ephemeral seeds zeroed (10/10 checks).
+- NO deployed-Worker RPC proof exists. The deployed-runtime evidence recorded
+  earlier still covers offline crypto only. Worker RPC support remains unproven
+  until the reviewer enables and publishes the read-only diagnostic and a live
+  probe is run.
+- No mainnet, no funds, no keys, no airdrop, no broadcast at any point.
