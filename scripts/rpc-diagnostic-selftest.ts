@@ -200,7 +200,10 @@ console.log("\n--- served report hygiene ---");
   const response = await respond(signedRequest(), { ...enabledDeps(), transport: dead });
   const text = await response.text();
   check("provider outage reports ok=false, not an error page", response.status === 200 && JSON.parse(text)["ok"] === false);
-  check("provider outage surfaces no provider text", !text.toLowerCase().includes("503") && !text.includes("solana.com"));
+  check("provider outage surfaces no provider text", !text.includes("solana.com") && !/[a-z]{4,}\s[a-z]{4,}/i.test(JSON.stringify(JSON.parse(text)["transport"])));
+  const meta = JSON.parse(text)["transport"] as Record<string, unknown>;
+  check("provider outage reports the numeric status only", Array.isArray(meta["statuses"]) && (meta["statuses"] as unknown[]).every((s) => typeof s === "number") && (meta["statuses"] as number[])[0] === 503);
+  check("provider outage classifies as http_error", meta["classification"] === "http_error" && meta["timedOut"] === false && meta["transportFailed"] === false);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -31,6 +31,27 @@ export const DIAGNOSTIC_RPC_ENDPOINT = "https://api.devnet.solana.com";
 const READ_ONLY_METHODS = new Set(["getGenesisHash", "getLatestBlockhash", "getFeeForMessage"]);
 const FEE_CAP_LAMPORTS = "100000";
 
+/**
+ * Strictly bounded transport metadata: numeric HTTP statuses and failure-class
+ * booleans only. It NEVER carries response text or body, headers, the endpoint,
+ * a provider key, or any provider error message — the HTTP adapter stays opaque.
+ */
+export interface RpcTransportMetadata {
+  attemptCount: number;
+  responseCount: number;
+  /** Numeric HTTP statuses in request order. No bodies, no headers. */
+  statuses: number[];
+  httpErrorCount: number;
+  timedOut: boolean;
+  transportFailed: boolean;
+  classification:
+    | "no_attempt"
+    | "responded"
+    | "http_error"
+    | "timeout"
+    | "transport_failure";
+}
+
 export interface RpcSelfCheckReport {
   ok: boolean;
   network: "devnet";
@@ -39,6 +60,7 @@ export interface RpcSelfCheckReport {
   checkCount: number;
   passedCount: number;
   checks: Record<string, boolean>;
+  transport: RpcTransportMetadata;
 }
 
 function uuid(): string {
@@ -66,6 +88,11 @@ export async function runReadOnlyRpcSelfCheck(
 
   let calls = 0;
   const requested: string[] = [];
+  // Bounded metadata only: statuses as numbers, failure classes as booleans.
+  const statuses: number[] = [];
+  let httpErrorCount = 0;
+  let timedOut = false;
+  let transportFailed = false;
   const countingTransport: typeof fetch = async (input, init) => {
     calls += 1;
     let method = "";
@@ -81,7 +108,19 @@ export async function runReadOnlyRpcSelfCheck(
       checks["noBroadcastAttempted"] = false;
       throw new Error("Read-only diagnostic refuses non-read RPC method.");
     }
-    return transport(input, init);
+    try {
+      const response = await transport(input, init);
+      statuses.push(response.status);
+      if (!response.ok) httpErrorCount += 1;
+      return response;
+    } catch (error) {
+      // Only the failure CLASS is recorded — never the error message or body.
+      const name =
+        error && typeof error === "object" && "name" in error ? String(error["name"]) : "";
+      if (name === "AbortError" || name === "TimeoutError") timedOut = true;
+      else transportFailed = true;
+      throw new Error("Custody RPC transport failure.");
+    }
   };
 
   // Seeds are held locally so the input buffers can actually be overwritten:
@@ -143,6 +182,15 @@ export async function runReadOnlyRpcSelfCheck(
 
   const entries = Object.entries(checks);
   const passedCount = entries.filter(([, value]) => value === true).length;
+  const classification: RpcTransportMetadata["classification"] = timedOut
+    ? "timeout"
+    : transportFailed
+      ? "transport_failure"
+      : httpErrorCount > 0
+        ? "http_error"
+        : statuses.length > 0
+          ? "responded"
+          : "no_attempt";
   return {
     ok: passedCount === entries.length,
     network: "devnet",
@@ -151,5 +199,14 @@ export async function runReadOnlyRpcSelfCheck(
     checkCount: entries.length,
     passedCount,
     checks,
+    transport: {
+      attemptCount: calls,
+      responseCount: statuses.length,
+      statuses,
+      httpErrorCount,
+      timedOut,
+      transportFailed,
+      classification,
+    },
   };
 }

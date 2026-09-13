@@ -108,11 +108,28 @@ const report = (await signed.json()) as {
   checkCount?: unknown;
   passedCount?: unknown;
   checks?: Record<string, unknown>;
+  transport?: {
+    attemptCount?: unknown;
+    responseCount?: unknown;
+    statuses?: unknown;
+    httpErrorCount?: unknown;
+    timedOut?: unknown;
+    transportFailed?: unknown;
+    classification?: unknown;
+  };
 };
 console.log(
   `ok=${report.ok === true} network=${String(report.network)} readOnly=${String(report.readOnly)} ` +
     `broadcast=${String(report.broadcast)} rpcCalls=${String(report.rpcCallCount)} ` +
     `checks=${String(report.passedCount)}/${String(report.checkCount)}`,
+);
+// Bounded transport metadata: numeric statuses and failure-class booleans only.
+const meta = report.transport ?? {};
+console.log(
+  `transport classification=${String(meta.classification)} attempts=${String(meta.attemptCount)} ` +
+    `responses=${String(meta.responseCount)} statuses=${JSON.stringify(meta.statuses ?? [])} ` +
+    `httpErrors=${String(meta.httpErrorCount)} timedOut=${String(meta.timedOut)} ` +
+    `transportFailed=${String(meta.transportFailed)}`,
 );
 for (const [name, value] of Object.entries(report.checks ?? {})) {
   check(name, value === true);

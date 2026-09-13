@@ -372,6 +372,52 @@ for (const [name, raw] of [
   check("unavailable provider still reports cleared ephemeral input seeds", report.checks["ephemeralInputSeedsCleared"] === true);
 }
 
+// ------------------------------------- bounded transport metadata classification
+{
+  const { transport } = transportFor(happy);
+  const report = await runReadOnlyRpcSelfCheck(transport);
+  const meta = report.transport;
+  check("healthy provider classifies as responded", meta.classification === "responded");
+  check("healthy provider records three 200 statuses", meta.statuses.length === 3 && meta.statuses.every((s) => s === 200));
+  check("healthy provider records no failure classes", meta.timedOut === false && meta.transportFailed === false && meta.httpErrorCount === 0);
+  check("attempt and response counts agree", meta.attemptCount === 3 && meta.responseCount === 3);
+}
+{
+  const dead: typeof fetch = async () => new Response("nope", { status: 503 });
+  const meta = (await runReadOnlyRpcSelfCheck(dead)).transport;
+  check("HTTP failure classifies as http_error", meta.classification === "http_error");
+  check("HTTP failure records the numeric status only", meta.statuses.length === 1 && meta.statuses[0] === 503 && meta.httpErrorCount === 1);
+  check("HTTP failure is not a timeout or transport failure", meta.timedOut === false && meta.transportFailed === false);
+}
+{
+  const abort: typeof fetch = async () => {
+    const error = new Error("aborted");
+    error.name = "AbortError";
+    throw error;
+  };
+  const meta = (await runReadOnlyRpcSelfCheck(abort)).transport;
+  check("abort classifies as timeout", meta.classification === "timeout" && meta.timedOut === true);
+  check("timeout records no status and no transport failure", meta.statuses.length === 0 && meta.transportFailed === false);
+}
+{
+  const broken: typeof fetch = async () => {
+    throw new TypeError("fetch failed: provider.example unreachable");
+  };
+  const report = await runReadOnlyRpcSelfCheck(broken);
+  const meta = report.transport;
+  check("network error classifies as transport_failure", meta.classification === "transport_failure" && meta.transportFailed === true);
+  check("network error records no status and no timeout", meta.statuses.length === 0 && meta.timedOut === false);
+  const serialized = JSON.stringify(report);
+  check("transport metadata leaks no provider error text", !serialized.includes("unreachable") && !serialized.includes("provider.example"));
+  check("transport metadata leaks no endpoint", !serialized.includes("solana.com") && !serialized.includes("https://"));
+  check("transport metadata values are numbers, booleans and a fixed label", Object.entries(meta).every(([key, value]) => key === "classification" ? typeof value === "string" : key === "statuses" ? Array.isArray(value) && value.every((v) => typeof v === "number") : typeof value === "number" || typeof value === "boolean"));
+}
+{
+  const invalid: typeof fetch = async () => new Response("{not json", { status: 200 });
+  const meta = (await runReadOnlyRpcSelfCheck(invalid)).transport;
+  check("malformed 200 response still classifies as responded", meta.classification === "responded" && meta.statuses[0] === 200);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log(
   "NOTE: every response above is a local mock transport. No real network call, no funding, no broadcast, and NO deployed-Worker RPC proof.",
