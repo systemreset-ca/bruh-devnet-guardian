@@ -77,9 +77,15 @@ export async function runReadOnlyRpcSelfCheck(
     return transport(input, init);
   };
 
-  const sender = Keypair.generate();
-  const recipient = Keypair.generate();
-  const reference = Keypair.generate();
+  // Seeds are held locally so they can actually be zeroed: web3.js
+  // `Keypair.secretKey` hands back a copy, so zeroing that proves nothing.
+  const seeds = [new Uint8Array(32), new Uint8Array(32), new Uint8Array(32)];
+  for (const seed of seeds) crypto.getRandomValues(seed);
+  const [sender, recipient, reference] = seeds.map((seed) => Keypair.fromSeed(seed)) as [
+    Keypair,
+    Keypair,
+    Keypair,
+  ];
   try {
     const url = new URL(DIAGNOSTIC_RPC_ENDPOINT);
     checks["endpointPinnedHttps"] =
@@ -123,13 +129,8 @@ export async function runReadOnlyRpcSelfCheck(
   } catch {
     // Opaque: provider errors and responses are never surfaced.
   } finally {
-    sender.secretKey.fill(0);
-    recipient.secretKey.fill(0);
-    reference.secretKey.fill(0);
-    checks["ephemeralKeysZeroed"] =
-      sender.secretKey.every((b) => b === 0) &&
-      recipient.secretKey.every((b) => b === 0) &&
-      reference.secretKey.every((b) => b === 0);
+    for (const seed of seeds) seed.fill(0);
+    checks["ephemeralKeysZeroed"] = seeds.every((seed) => seed.every((b) => b === 0));
   }
 
   const entries = Object.entries(checks);

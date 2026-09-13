@@ -294,7 +294,17 @@ for (const [name, raw] of [
   );
   check(
     "tampered wire bytes rejected",
-    await rejects(async () => rpc.validateSigned({ ...signed, wireBase64: `${signed.wireBase64.slice(0, -4)}AAAA` }, approval)),
+    await rejects(async () => rpc.validateSigned(
+        {
+          ...signed,
+          wireBase64: (() => {
+            const bytes = Buffer.from(signed.wireBase64, "base64");
+            bytes[bytes.length - 3] = bytes[bytes.length - 3]! ^ 0xff;
+            return bytes.toString("base64");
+          })(),
+        },
+        approval,
+      )),
   );
   check(
     "changed lamports rejected",
