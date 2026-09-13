@@ -21,14 +21,20 @@ export const Route = createFileRoute("/api/public/signer/selftest")({
           "@/lib/custody/request-auth.server"
         );
 
+        const { getDurableNonceConsumer } = await import("@/lib/custody/nonce-store.server");
+
         const rawBody = await request.text();
-        const auth = verifySignerRequest({
+        const auth = await verifySignerRequest({
           method: "POST",
           path: PATH,
           headers: request.headers,
           rawBody,
           // Read per-request: env is injected at call time in the server runtime.
           secret: process.env["SIGNER_CALLER_SECRET"],
+          expectedKeyId: process.env["SIGNER_CALLER_KEY_ID"],
+          // No durable atomic nonce store is deployed yet, so this resolves to
+          // null and every request fails closed. There is no in-memory fallback.
+          consumeNonce: await getDurableNonceConsumer(),
         });
         if (!auth.ok) return unauthorizedResponse();
 
