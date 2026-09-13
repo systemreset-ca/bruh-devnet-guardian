@@ -901,3 +901,36 @@ Codex publishes the disabled config. No further live polling was performed.
 
 No funding, airdrop, broadcast, wallet key, provisioning activation, schema
 application or mainnet was involved.
+
+## Bounded transport metadata in the read-only RPC diagnostic
+
+Purpose: diagnose the live failure (signed 200, ok=false, rpcCalls=1, checks 3/10)
+without weakening opacity. Nothing about the provider is surfaced.
+
+Added to `runReadOnlyRpcSelfCheck` and to the diagnostic response as `transport`:
+`attemptCount`, `responseCount`, `statuses` (numeric HTTP statuses in request
+order), `httpErrorCount`, `timedOut`, `transportFailed`, and a fixed-label
+`classification` of `no_attempt | responded | http_error | timeout | transport_failure`.
+
+Never included: response text or body, headers, the endpoint, any key, or any
+provider error message. The HTTP adapter itself remains opaque and unchanged.
+
+Classification tests (local mock transports only, no network call):
+- `scripts/http-rpc-selftest.ts` — 89/89 PASS, including healthy `responded`
+  (three 200s), `http_error` (503, status number only), `timeout` (AbortError,
+  no status), `transport_failure` (TypeError, no status), malformed 200 body
+  still `responded`, plus leak assertions: no provider error text, no endpoint,
+  values are numbers/booleans and one fixed label.
+- `scripts/rpc-diagnostic-selftest.ts` — 51/51 PASS, including served-report
+  hygiene for the new field and outage classification.
+
+Other suites unchanged and green: custody 45/45, wallet record 94/94, SDK smoke
+9/9. `tsgo --noEmit` clean, `bun run build` PASS.
+
+`SIGNER_DIAGNOSTIC_ENABLED` remains "false"; no live request was made in this
+slice. No RPC compatibility on the deployed runtime is claimed and no wallet
+readiness is claimed. No funding, airdrop, broadcast, schema application or
+mainnet.
+
+Source SHA before this slice: a1ea30acdfbe9a3b963456e870e7d9d947bd0adc (this
+slice auto-committed on top).
