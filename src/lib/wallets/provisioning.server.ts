@@ -35,6 +35,7 @@ import {
   validateApproval,
   type MembershipAuthorizer,
 } from "./authorization.server";
+import { InvalidWalletRecord, parseWalletRecord } from "./wallet-record.server";
 import {
   publicView,
   type WalletPublicView,
@@ -45,6 +46,7 @@ import {
 
 export type ProvisionFailure =
   | "provisioning_disabled"
+  | "method_not_allowed"
   | "unauthorized"
   | "malformed_request"
   | "initdata_rejected"
@@ -52,11 +54,14 @@ export type ProvisionFailure =
   | "not_authorized_member"
   | "wrapping_key_unavailable"
   | "store_unavailable"
+  | "inconsistent_mapping"
+  | "store_record_invalid"
   | "store_error";
 
 export type ProvisionOutcome =
   | { ok: true; created: boolean; wallet: WalletPublicView }
   | { ok: false; reason: ProvisionFailure };
+
 
 const TELEGRAM_CHAT_ID = /^-?[0-9]{1,20}$/;
 const ALLOWED_BODY_KEYS = ["telegram_init_data", "telegram_chat_id"] as const;
@@ -123,6 +128,9 @@ export async function provisionDevnetWallet(input: {
 }): Promise<ProvisionOutcome> {
   if (input.enabled !== true) return { ok: false, reason: "provisioning_disabled" };
 
+  // Provisioning is a POST-only operation; no other verb reaches any check.
+  if (input.request.method !== "POST") return { ok: false, reason: "method_not_allowed" };
+
   const auth = await verifySignerRequest({
     method: input.request.method,
     path: input.request.path,
@@ -172,9 +180,37 @@ export async function provisionDevnetWallet(input: {
     network: "devnet",
   };
 
+  const store = input.store;
+  let validated: { created: boolean; record: WalletRecord };
   try {
-    const existing = await input.store.findByScope(scope);
-    if (existing) return { ok: true, created: false, wallet: publicView(existing) };
+    // Nothing a store returns is trusted: every row is re-parsed against this
+    // exact scope, including envelope structure and envelope↔row bindings.
+    const existing = await store.findByScope(scope);
+    if (existing !== null) {
+      const record = parseWalletRecord(existing, scope);
+      return { ok: true, created: false, wallet: publicView(record) };
+    }
+
+    // One wallet per Telegram identity: a different group/membership UUID
+    // mapping must not be able to mint a second wallet for the same user.
+    const byIdentity = await store.findByTelegramIdentity({
+      telegramChatId: scope.telegramChatId,
+      telegramUserId: scope.telegramUserId,
+      network: "devnet",
+    });
+    if (byIdentity !== null) {
+      const mapped = byIdentity.scope;
+      const consistent =
+        mapped.groupId === scope.groupId &&
+        mapped.membershipId === scope.membershipId &&
+        mapped.telegramChatId === scope.telegramChatId &&
+        mapped.telegramUserId === scope.telegramUserId &&
+        mapped.network === "devnet";
+      // Either the scope lookup above should have found it (consistent mapping,
+      // so the store is contradicting itself) or the mapping changed. Both are
+      // fail-closed conditions; never provision a second wallet.
+      return { ok: false, reason: consistent ? "store_record_invalid" : "inconsistent_mapping" };
+    }
 
     // Server-generated identity; never client-supplied.
     const walletId = (input.newWalletId ?? randomUUID)();
@@ -195,9 +231,18 @@ export async function provisionDevnetWallet(input: {
     // Atomic first-writer-wins: a losing race returns the persisted row, and the
     // candidate envelope is discarded unpersisted — no orphaned usable key, no
     // overwrite of an existing wallet.
-    const result = await input.store.insertIfAbsent(candidate);
-    return { ok: true, created: result.created, wallet: publicView(result.record) };
-  } catch {
+    const result = await store.insertIfAbsent(candidate);
+    validated = {
+      created: result.created === true,
+      // The winning row is validated exactly like a pre-existing row.
+      record: parseWalletRecord(result.record, scope),
+    };
+  } catch (error) {
+    if (error instanceof InvalidWalletRecord) {
+      return { ok: false, reason: "store_record_invalid" };
+    }
     return { ok: false, reason: "store_error" };
   }
+  return { ok: true, created: validated.created, wallet: publicView(validated.record) };
 }
+

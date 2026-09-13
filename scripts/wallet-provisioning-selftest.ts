@@ -411,7 +411,43 @@ let firstWalletId = "";
 {
   const store = createInMemoryWalletStore();
   await provision(store);
-  const otherGroup = await provision(store, {
+
+  // A different Telegram identity (different verified user) gets its own wallet.
+  const otherUserId = 5555555555;
+  const otherInitData = buildFixtureInitData({
+    secret: fixtureKeys.secret,
+    botId: BOT_ID,
+    telegramUserId: otherUserId,
+    authDateSeconds: Math.floor(NOW / 1000) - 5,
+  });
+  const otherRaw = JSON.stringify({
+    telegram_init_data: otherInitData,
+    telegram_chat_id: CHAT_ID,
+  });
+  const otherUser = await provisionDevnetWallet({
+    enabled: true,
+    request: signedRequest(otherRaw),
+    auth: { secret: SECRET, expectedKeyId: KEY_ID, consumeNonce: createInMemoryNonceStore().consume },
+    authorizer: mockAuthorizer({
+      groupId: randomUUID(),
+      membershipId: randomUUID(),
+      telegramChatId: CHAT_ID,
+      telegramUserId: String(otherUserId),
+    }),
+    vault,
+    store,
+    now: NOW,
+    verifyInitData,
+  });
+  check("a different Telegram identity gets its own wallet", otherUser.ok === true && otherUser.created === true);
+  check("two identities hold two distinct wallets", store.rows().length === 2);
+  check(
+    "distinct wallets hold distinct addresses",
+    new Set(store.rows().map((r) => r.address)).size === 2,
+  );
+
+  // Same verified user, different approved UUID mapping: refused, not a 2nd wallet.
+  const remapped = await provision(store, {
     authorizer: mockAuthorizer({
       groupId: randomUUID(),
       membershipId: randomUUID(),
@@ -419,12 +455,12 @@ let firstWalletId = "";
       telegramUserId: String(USER_ID),
     }),
   });
-  check("a different group/membership scope gets its own wallet", otherGroup.ok === true && otherGroup.created === true);
-  check("two scopes hold two distinct wallets", store.rows().length === 2);
   check(
-    "distinct scopes hold distinct addresses",
-    new Set(store.rows().map((r) => r.address)).size === 2,
+    "a changed group/membership mapping for the same user is refused",
+    !remapped.ok && remapped.reason === "inconsistent_mapping",
   );
+  check("no third wallet was created", store.rows().length === 2);
+
 
   const missingVault = await provision(store, { vault: null });
   check("missing wrapping key rejects, no invented key", !missingVault.ok && missingVault.reason === "wrapping_key_unavailable");

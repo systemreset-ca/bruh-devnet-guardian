@@ -651,3 +651,57 @@ Cross-reference: Codex recorded the live disabled diagnostic (`404` with
 `cache-control: no-store`) and the signed crypto 9/9 evidence in the public
 BRUH draft PR 46 at `fe63b95b0b12a0a77efb99861bcb4e1ddd079834`. That repository
 is reference-only and was not modified.
+
+## Review fixes on the source-only wallet provisioning slice (origin/main 0ab23ef follow-up)
+
+Source, proposal and tests only. The wallet schema is still NOT applied to the
+Cloud backend, no provisioning endpoint exists, no keys, funds or mainnet.
+
+Changes:
+- `src/lib/wallets/wallet-record.server.ts`: strict parsing of any stored row —
+  exact envelope key set, version 1, devnet, UUIDs, base58 32-byte address,
+  canonical base64 with exact decoded lengths (12-byte IVs, 48-byte AES-GCM
+  outputs), envelope-to-row bindings and full scope equality. Failures raise a
+  valueless `InvalidWalletRecord` (never echoes stored or request data).
+- `publicView` reads network/frozen from the validated record instead of
+  hardcoding them, and refuses an invalid record.
+- `provisioning.server.ts`: POST-only; every row a store returns (found row,
+  winning row, telegram mapping row) is re-validated before use; new
+  fail-closed reasons `method_not_allowed`, `inconsistent_mapping`,
+  `store_record_invalid`.
+- `createRpcWalletStore(rpc)`: narrow controlled-RPC adapter over the four
+  proposed routines, with strict row validation and a post-insert re-read. The
+  default production factory still returns `null` (fail-closed) until the
+  schema and configuration are reviewed and applied.
+- `docs/proposed-migration-wallets.sql` (PROPOSED, NOT APPLIED): exact envelope
+  structure validation, `UNIQUE (telegram_chat_id, telegram_user_id, network)`,
+  fail-closed inconsistent UUID remapping, envelope immutability (no
+  replacement in this slice), append-only `devnet_wallet_events` audit written
+  in the SAME transaction as creation and holding no envelope material, and a
+  fully scoped envelope read (no wallet-id-only read).
+
+Test results (this build):
+- `scripts/wallet-record-selftest.ts` — 88/88 PASS (strict record and envelope
+  validation, store-distrust, one wallet per Telegram identity).
+- `scripts/wallet-provisioning-selftest.ts` — 67/67 PASS.
+- `scripts/wallet-sql-pglite-test.ts` — 164/164 PASS, actual isolated
+  PostgreSQL (PGlite) against the proposed SQL, including the controlled-RPC
+  adapter driven through the real routines.
+- `scripts/custody-selftest.ts` 45/45, `scripts/telegram-initdata-selftest.ts`
+  27/27, `scripts/nonce-adapter-boundary-test.ts` 14/14,
+  `scripts/diagnostic-probe-selftest.ts` 28/28, `scripts/sdk-smoke.ts` 9/9.
+- `tsgo --noEmit` clean; `bun run build` PASS.
+
+Limitations (unchanged and explicit):
+- Envelope fixtures are structurally realistic SYNTHETIC values built from
+  random padding: not real keys, not real ciphertexts.
+- Membership approvals in tests are mock callbacks, NOT real BRUH group or
+  membership proof; Telegram accept-cases use generated-key fixtures, NOT real
+  Telegram signatures.
+- PGlite is single-session: same-scope repeats above are sequential, not real
+  multi-session concurrency. Real parallel behaviour must be re-measured only
+  after a reviewed migration is applied.
+- No production authorization callback and no production wrapping key are
+  configured; both fail closed and are documented rather than invented.
+- Deployed-Worker evidence still covers offline crypto only; no RPC, no
+  on-chain reads, no broadcast.
