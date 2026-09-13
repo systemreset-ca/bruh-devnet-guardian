@@ -1,5 +1,5 @@
 /**
- * REAL multi-session concurrency test for the durable nonce store.
+ * REAL multi-session concurrency test for the durable nonce store (V2 routine).
  *
  * Each attempt is a separate HTTP request to the database routine, so attempts
  * land on distinct database sessions/connections — unlike the single-session
@@ -19,26 +19,32 @@ if (!url || !serviceKey) {
 
 const TRIALS = 8;
 const RACERS = 6;
+const FIXED_TTL_SECONDS = 300;
 
-async function consume(keyId: string, nonce: string): Promise<boolean> {
-  const response = await fetch(`${url}/rest/v1/rpc/consume_signer_nonce`, {
+async function rpc(keyId: string, nonce: string, ttl: number): Promise<Response> {
+  return fetch(`${url}/rest/v1/rpc/consume_signer_nonce`, {
     method: "POST",
     headers: {
       // Opaque sb_secret_* keys are not JWTs: send apikey only, never Bearer.
       apikey: serviceKey!,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ p_key_id: keyId, p_nonce: nonce, p_ttl_seconds: 60 }),
+    body: JSON.stringify({ p_key_id: keyId, p_nonce: nonce, p_ttl_seconds: ttl }),
   });
+}
+
+async function consume(keyId: string, nonce: string): Promise<boolean> {
+  const response = await rpc(keyId, nonce, FIXED_TTL_SECONDS);
   if (!response.ok) throw new Error(`rpc_failed_status_${response.status}`);
   const value = await response.json();
   if (typeof value !== "boolean") throw new Error("rpc_non_boolean");
   return value;
 }
 
+/** Canonical lowercase hex nonce, matching the verifier and the routine. */
 function randomNonce(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return `nonce_${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}`;
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 let passed = 0;
@@ -74,20 +80,25 @@ record(
   `${RACERS} simultaneous sessions`,
 );
 
-// TTL bounds are enforced server-side even for a direct routine caller.
-for (const ttl of [0, -1, 3600]) {
+// A sequential replay of a live nonce must be rejected over HTTP too.
+const replayNonce = randomNonce();
+const firstUse = await consume(keyId, replayNonce);
+const replay = await consume(keyId, replayNonce);
+record("multi_session_live_nonce_replay_rejected", firstUse === true && replay === false);
+
+// Uppercase nonces are rejected server-side.
+{
+  const upper = randomNonce().toUpperCase();
+  const response = await rpc(keyId, upper, FIXED_TTL_SECONDS);
+  record("multi_session_uppercase_nonce_rejected", !response.ok);
+}
+
+// Fixed retention is enforced server-side even for a direct routine caller.
+for (const ttl of [0, -1, 1, 60, 299, 301, 3600]) {
   let rejected = false;
   try {
-    await fetch(`${url}/rest/v1/rpc/consume_signer_nonce`, {
-      method: "POST",
-      headers: {
-        apikey: serviceKey!,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ p_key_id: keyId, p_nonce: randomNonce(), p_ttl_seconds: ttl }),
-    }).then((r) => {
-      if (!r.ok) rejected = true;
-    });
+    const response = await rpc(keyId, randomNonce(), ttl);
+    rejected = !response.ok;
   } catch {
     rejected = true;
   }
