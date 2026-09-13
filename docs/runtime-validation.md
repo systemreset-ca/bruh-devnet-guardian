@@ -533,4 +533,5 @@ diagnostic address should return `404`; the operator console already reports
 the probe as disabled at source/preview.
 
 No RPC, no broadcast, no funding, no wallet provisioning occurred. Source SHA
-before this commit: `db6217de3ba7674fd76fe799a5033816675c6489`.
+before this commit: `db6217de3ba7674fd76fe799a5033816675c6489`; operator
+console and caveat updated at `2fb97de9d61a2b8d4b1093d785dab7fcc92e7da5`.
