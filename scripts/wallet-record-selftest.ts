@@ -133,9 +133,10 @@ check(
   rejects(() => parseCustodyEnvelope({ ...envelope, wrappedDataKey: Buffer.alloc(47).toString("base64") })),
 );
 check(
-  "non-canonical base64 rejected",
-  rejects(() => parseCustodyEnvelope({ ...envelope, seedIv: `${envelope.seedIv.slice(0, -1)}A` })),
+  "non-canonical base64 rejected (stray padding)",
+  rejects(() => parseCustodyEnvelope({ ...envelope, seedIv: `${envelope.seedIv}=` })),
 );
+
 check(
   "base64url alphabet rejected",
   rejects(() => parseCustodyEnvelope({ ...envelope, wrappedDataKey: Buffer.from(new Uint8Array(48)).toString("base64url") + "==" })),
