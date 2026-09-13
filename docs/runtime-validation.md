@@ -473,3 +473,63 @@ slice (source-only change; the applied V2 routine already enforces
 
 Not published. Deployed Worker execution still unverified. No wrapping keys,
 wallet routes, funds or mainnet.
+
+## DEPLOYED WORKER EVIDENCE (captured, diagnostic now disabled)
+
+Reviewed GitHub head at publish: `f6c558cb804ff0c91ed6bc47ee4eeefd4c254000`.
+Published host: `bruh-devnet-guardian.lovable.app` (published by Codex, not the
+agent).
+
+This is the first evidence in this project about execution inside the **deployed
+Worker runtime**. It is separate from, and does not reuse, any local CLI
+test-run evidence recorded above.
+
+`scripts/live-diagnostic-probe.ts` (trusted environment, injected credentials,
+prints status/booleans/counts only — never the secret, key ID, signature, nonce,
+headers or body):
+
+- `status=200`, `ok=true`, `network=devnet`, `broadcast=false`, `checks=9/9`
+- PASS: aesGcmEnvelopeSealed, aesGcmEnvelopeAuthenticated,
+  aadScopeBindingEnforced, tamperedCiphertextRejected, solTransferSignedOffline,
+  ed25519SignatureVerifies, singleSystemTransferInstruction,
+  senderMismatchRejected, nonDevnetRejected
+
+`scripts/live-diagnostic-denials.ts` — **3/3 PASS**:
+
+- `deployed_unauthenticated_post_denied` (status=401)
+- `deployed_signed_request_accepted` (status=200)
+- `deployed_identical_replay_denied` (status=401) — the durable nonce store
+  rejected a byte-identical replay of one valid signed request on the deployed
+  runtime.
+
+No RPC, no broadcast, no funding, no wallet provisioning occurred. No request
+credential, header or body was printed or logged at any point.
+
+Immediately after capture, `SIGNER_DIAGNOSTIC_ENABLED` was set to `"false"`
+through the platform secret manager (name and the literal value `false` only;
+the caller secret and key ID were never read, printed or touched). The
+diagnostic route therefore returns 404 for everyone. `SIGNER_CALLER_SECRET` and
+`SIGNER_CALLER_KEY_ID` remain stored, unused and unrevealed.
+
+Operator console: a "Verification evidence" panel now reports local test-run
+proof and deployed-runtime proof as separate rows, plus the disabled diagnostic
+and the fixtures-only status of third-party sign-in verification.
+
+Source SHA before this commit: `db6217de3ba7674fd76fe799a5033816675c6489`.
+
+### Kill-switch propagation caveat (accurate live state)
+
+`SIGNER_DIAGNOSTIC_ENABLED` is stored as `"false"` in the secret manager
+(verified by name; value written as the literal `false`). The **already
+published** deployment still evaluated the old value 100 seconds after the
+change: repeated unauthenticated probes returned `401` (the auth denial) rather
+than the `404` the disabled path returns, over 10 polls at 10-second intervals.
+
+Interpretation: server environment values are baked into the running deployment,
+so the switch-off takes effect on the next publish. Until Codex republishes, the
+diagnostic address remains reachable but still denies every request that is not
+a valid signed request with a fresh one-time token, and each such token is
+single-use. No caller credential was exposed by these polls.
+
+Action for Codex: republish once so the stored `false` takes effect, then
+re-check that an unauthenticated POST to the diagnostic address returns `404`.

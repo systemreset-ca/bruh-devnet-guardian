@@ -62,6 +62,33 @@ const posture: { name: string; value: string }[] = [
   { name: "External secret scopes", value: "not linked" },
 ];
 
+const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string }[] = [
+  {
+    name: "Local test-run proof (CLI)",
+    tone: "ok",
+    state: "verified",
+    note: "Envelope, transfer-signing, request-auth, one-time-token and third-party sign-in suites run in the local test runner only. This is not evidence about the deployed runtime.",
+  },
+  {
+    name: "Deployed runtime proof (Worker)",
+    tone: "ok",
+    state: "verified",
+    note: "An authenticated diagnostic request executed on the deployed runtime and returned booleans only: envelope, scope-binding, tamper rejection and offline transfer signing all held. Unauthenticated and replayed requests were denied there.",
+  },
+  {
+    name: "Diagnostic probe",
+    tone: "warn",
+    state: "off at next publish",
+    note: "Switched off in the secure store immediately after the deployed evidence was captured. The live deployment still carries the previous setting until the next publish, and until then it denies every request without a valid single-use signed credential.",
+  },
+  {
+    name: "Third-party sign-in proof",
+    tone: "warn",
+    state: "fixtures only",
+    note: "Accepted cases used locally generated test keys. No real live sign-in payload or real account has been verified.",
+  },
+];
+
 function OperatorStatus() {
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl px-5 py-14">
@@ -120,6 +147,26 @@ function OperatorStatus() {
             </div>
           ))}
         </dl>
+      </section>
+
+      <section className="panel mt-6 p-5" aria-labelledby="evidence">
+        <h2 id="evidence" className="label-key">
+          Verification evidence
+        </h2>
+        <ul className="mt-4 divide-y divide-border">
+          {evidence.map((e) => (
+            <li key={e.name} className="py-3 first:pt-0 last:pb-0">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="console text-sm text-foreground">{e.name}</span>
+                <StatusBadge tone={e.tone}>{e.state}</StatusBadge>
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{e.note}</p>
+            </li>
+          ))}
+        </ul>
+        <p className="console mt-4 text-[0.6875rem] text-muted-foreground">
+          Local test-run proof and deployed-runtime proof are reported separately and never merged.
+        </p>
       </section>
 
       <section className="panel mt-6 p-5" aria-labelledby="reference">
