@@ -16,75 +16,75 @@ BEGIN
   -- first use / replay
   INSERT INTO signer_nonce_test_results (test, pass, note)
   VALUES ('first_use_returns_true',
-          public.consume_signer_nonce('signer-key-tst', 'nonce_first_use_0001', 60) IS TRUE, 'single session');
+          public.consume_signer_nonce('signer.key-tst', 'a1b2c3d4e5f60718293a4b5c6d7e8f90', 300) IS TRUE, 'single session');
 
   INSERT INTO signer_nonce_test_results (test, pass, note)
   VALUES ('replay_returns_false',
-          public.consume_signer_nonce('signer-key-tst', 'nonce_first_use_0001', 60) IS FALSE, 'single session');
+          public.consume_signer_nonce('signer.key-tst', 'a1b2c3d4e5f60718293a4b5c6d7e8f90', 300) IS FALSE, 'single session');
 
   -- expiry is set from the server clock and bounded by the requested TTL
   SELECT expires_at INTO v_expires FROM public.signer_nonces
-   WHERE key_id = 'signer-key-tst' AND nonce = 'nonce_first_use_0001';
+   WHERE key_id = 'signer.key-tst' AND nonce = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
   INSERT INTO signer_nonce_test_results (test, pass, note)
   VALUES ('expiry_uses_server_clock',
-          v_expires > now() AND v_expires <= now() + interval '60 seconds', 'no client clock accepted');
+          v_expires > now() AND v_expires <= now() + interval '300 seconds', 'no client clock accepted');
 
   -- expired row is reclaimable exactly once
   UPDATE public.signer_nonces SET expires_at = now() - interval '1 second'
-   WHERE key_id = 'signer-key-tst' AND nonce = 'nonce_first_use_0001';
+   WHERE key_id = 'signer.key-tst' AND nonce = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
   INSERT INTO signer_nonce_test_results (test, pass, note)
   VALUES ('expired_row_reclaimed_once',
-          public.consume_signer_nonce('signer-key-tst', 'nonce_first_use_0001', 60) IS TRUE
-      AND public.consume_signer_nonce('signer-key-tst', 'nonce_first_use_0001', 60) IS FALSE, 'expiry window');
+          public.consume_signer_nonce('signer.key-tst', 'a1b2c3d4e5f60718293a4b5c6d7e8f90', 300) IS TRUE
+      AND public.consume_signer_nonce('signer.key-tst', 'a1b2c3d4e5f60718293a4b5c6d7e8f90', 300) IS FALSE, 'expiry window');
 
   -- constraint rejections
-  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('short', 'nonce_valid_00000001', 60);
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('short', 'aaaabbbbccccddddeeeeffff00001111', 300);
   EXCEPTION WHEN others THEN v_pass := true; END;
   INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_short_key_id', v_pass);
 
-  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('bad key id!!', 'nonce_valid_00000001', 60);
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('bad key id!!', 'aaaabbbbccccddddeeeeffff00001111', 300);
   EXCEPTION WHEN others THEN v_pass := true; END;
   INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_key_id_charset', v_pass);
 
-  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer-key-tst', 'tooshort', 60);
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer.key-tst', 'abcd', 300);
   EXCEPTION WHEN others THEN v_pass := true; END;
   INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_short_nonce', v_pass);
 
-  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer-key-tst', 'nonce with spaces!!!!', 60);
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer.key-tst', 'A1B2C3D4E5F60718293A4B5C6D7E8F90', 300);
   EXCEPTION WHEN others THEN v_pass := true; END;
-  INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_nonce_charset', v_pass);
+  INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_uppercase_hex_nonce', v_pass);
 
-  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer-key-tst', NULL, 60);
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer.key-tst', NULL, 300);
   EXCEPTION WHEN others THEN v_pass := true; END;
   INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_null_nonce', v_pass);
 
-  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer-key-tst', 'nonce_ttl_zero_000001', 0);
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer.key-tst', '99887766554433221100ffeeddccbbaa', 0);
   EXCEPTION WHEN others THEN v_pass := true; END;
   INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_zero_ttl', v_pass);
 
-  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer-key-tst', 'nonce_ttl_long_000001', 3600);
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer.key-tst', '1234567890abcdef1234567890abcdef', 3600);
   EXCEPTION WHEN others THEN v_pass := true; END;
-  INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_long_ttl_over_300s', v_pass);
+  INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_ttl_other_than_300', v_pass);
 
-  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer-key-tst', 'nonce_ttl_null_000001', NULL);
+  BEGIN v_pass := false; PERFORM public.consume_signer_nonce('signer.key-tst', 'fedcba0987654321fedcba0987654321', NULL);
   EXCEPTION WHEN others THEN v_pass := true; END;
   INSERT INTO signer_nonce_test_results (test, pass) VALUES ('reject_null_ttl', v_pass);
 
   -- bounded cleanup of expired rows
   INSERT INTO public.signer_nonces (key_id, nonce, expires_at)
-  SELECT 'signer-key-cln', 'nonce_cleanup_' || lpad(g::text, 8, '0'), now() - interval '1 minute'
+  SELECT 'signer.key-cln', lpad(to_hex(g), 32, '0'), now() - interval '1 minute'
     FROM generate_series(1, 50) g;
-  PERFORM public.consume_signer_nonce('signer-key-tst', 'nonce_cleanup_trigger1', 60);
+  PERFORM public.consume_signer_nonce('signer.key-tst', '11223344556677889900aabbccddeeff', 300);
   INSERT INTO signer_nonce_test_results (test, pass, note)
   VALUES ('expired_rows_cleaned_up',
-          (SELECT count(*) FROM public.signer_nonces WHERE key_id = 'signer-key-cln') = 0,
+          (SELECT count(*) FROM public.signer_nonces WHERE key_id = 'signer.key-cln') = 0,
           'bounded at 200 rows per call');
 
   -- sequential double attempt in ONE session (not concurrency)
   SELECT count(*) INTO v_wins FROM (
-    SELECT public.consume_signer_nonce('signer-key-tst', 'nonce_seq_race_000001', 60) AS r
+    SELECT public.consume_signer_nonce('signer.key-tst', '0f1e2d3c4b5a69788796a5b4c3d2e1f0', 300) AS r
     UNION ALL
-    SELECT public.consume_signer_nonce('signer-key-tst', 'nonce_seq_race_000001', 60)
+    SELECT public.consume_signer_nonce('signer.key-tst', '0f1e2d3c4b5a69788796a5b4c3d2e1f0', 300)
   ) s WHERE r;
   INSERT INTO signer_nonce_test_results (test, pass, note)
   VALUES ('sequential_same_nonce_one_winner', v_wins = 1, 'SINGLE SESSION ONLY - not real concurrency');
@@ -144,7 +144,7 @@ BEGIN
           (SELECT prosecdef FROM pg_proc WHERE oid = 'public.consume_signer_nonce(text,text,integer)'::regprocedure), 'ACL');
 
   -- clean up test rows
-  DELETE FROM public.signer_nonces WHERE key_id IN ('signer-key-tst', 'signer-key-cln', 'signer-key-cnc');
+  DELETE FROM public.signer_nonces WHERE key_id IN ('signer.key-tst', 'signer.key-cln', 'signer.key-cnc');
 END $$;
 
 SELECT test, pass, coalesce(note, '') AS note FROM signer_nonce_test_results ORDER BY ord;
