@@ -7,7 +7,7 @@ keys, no production wrapping key.
 
 ## Commit
 
-Validated at commit `4430fa1baeb5cfee157f04766d9b5f54061d8c9f`
+Validated at commit `ec846f79efd8bbddd83c66888abd4d3246127595`
 (run date: 2026-09-13 UTC). GitHub sync: `systemreset-ca/bruh-devnet-guardian`
 (separate repository from `bruhlegends`; local clone HEAD
 `88e0590fdae9316effaae50f83753d6243ab7fa1`).
@@ -63,7 +63,7 @@ occurred.
 
 ## Production build
 
-`bun run build` — **PASS**, built in 331 ms, nitro output generated
+`bun run build` — **PASS**, built in 278 ms, nitro output generated
 (`dist/nitro.json`), `@solana/web3.js` bundled for the worker target
 (656.48 kB / 145.25 kB gzip).
 
