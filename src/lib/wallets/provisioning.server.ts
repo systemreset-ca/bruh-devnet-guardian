@@ -174,19 +174,46 @@ export async function provisionDevnetWallet(input: {
   }
   if (!approval) return { ok: false, reason: "not_authorized_member" };
 
+  return provisionVerifiedScope({
+    scope: {
+      groupId: approval.groupId,
+      membershipId: approval.membershipId,
+      telegramChatId: approval.telegramChatId,
+      telegramUserId: approval.telegramUserId,
+      network: "devnet",
+    },
+    vault: input.vault,
+    store: input.store,
+    ...(input.newWalletId === undefined ? {} : { newWalletId: input.newWalletId }),
+  });
+}
+
+/**
+ * Shared scope-based provisioning core — everything AFTER authorization.
+ *
+ * The caller must already have established the scope through a trusted path
+ * (the HMAC + Telegram + membership-callback service above, or the reviewed
+ * bridge receiver). This function performs no authentication of its own, so it
+ * must never be reachable from a route directly; it stays fail-closed on a
+ * missing wrapping key or store and keeps every record, envelope-authentication,
+ * idempotency and race guarantee unchanged.
+ */
+export async function provisionVerifiedScope(input: {
+  scope: WalletScope;
+  /** Vault built from an explicitly injected non-extractable wrapping key. */
+  vault: DevnetCustodyVault | undefined | null;
+  store: WalletStore | undefined | null;
+  /** Test seam only; the wallet UUID is always server-generated. */
+  newWalletId?: () => string;
+}): Promise<ProvisionOutcome> {
   if (!input.vault) return { ok: false, reason: "wrapping_key_unavailable" };
   if (!input.store) return { ok: false, reason: "store_unavailable" };
+  if (input.scope.network !== "devnet") return { ok: false, reason: "malformed_request" };
 
-  const scope: WalletScope = {
-    groupId: approval.groupId,
-    membershipId: approval.membershipId,
-    telegramChatId: approval.telegramChatId,
-    telegramUserId: approval.telegramUserId,
-    network: "devnet",
-  };
-
+  const scope: WalletScope = input.scope;
   const store = input.store;
   const vault = input.vault;
+
 
   /**
    * Authenticated decryption gate. Structural validation alone cannot detect a
