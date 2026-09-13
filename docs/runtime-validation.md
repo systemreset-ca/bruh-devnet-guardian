@@ -236,3 +236,76 @@ This project can be connected to its **own separate repository** via
 **Settings → GitHub → Connect to GitHub** in the project editor. Each Lovable
 project maps to a distinct repository, so connecting BRUH Devnet Signer does not
 affect or disconnect the BRUH (`bruhlegends`) repository connection.
+
+## V2 nonce migration — applied (2026-09-13)
+
+Independent Codex review validated the corrected V2 SQL against isolated PGlite
+(15 assertions). Under owner standing authorization, that exact SQL was then
+applied to this project's own Cloud backend as a **new** migration journal entry;
+the original nonce migration file is preserved unchanged.
+
+Applied changes (nonce-only; no other schema touched):
+
+- `public.consume_signer_nonce(text, text, integer)` replaced:
+  - `SECURITY DEFINER SET search_path = pg_catalog`, every table reference
+    schema-qualified (`pg_temp` cannot shadow).
+  - Fixed retention: any `ttl_seconds` other than `300` raises. A shorter TTL
+    would let a nonce be reclaimed while the verifier's 60-second timestamp
+    window still accepts the same request.
+  - `key_id` regex `^[A-Za-z0-9._-]{1,64}$` (matches the verifier).
+  - `nonce` regex `^[0-9a-f]{32,64}$` (canonical lowercase hex; the verifier
+    *rejects* uppercase rather than normalizing it).
+  - Expiry from `pg_catalog.now()` only; bounded cleanup of ≤200 expired rows
+    per call; atomic `INSERT ... ON CONFLICT ... WHERE expires_at < now()`.
+  - `RETURN COALESCE(v_first_use, false)` (not `pg_catalog.coalesce`).
+- Grants: `REVOKE ALL` on `public.signer_nonces` from `PUBLIC`, `anon`,
+  `authenticated`, `service_role`; `REVOKE ALL` on the routine from `PUBLIC`,
+  `anon`, `authenticated`; `GRANT EXECUTE` on the routine to `service_role` only.
+- Table RLS remains enabled and forced with four deny-all policies.
+
+Adapter alignment: `getDurableNonceConsumer()` now requires the verifier's own
+window to be exactly 300 s and always sends `300`; any other derived value throws
+(fail closed, no clamping). Still no missing-store fallback.
+
+### Test evidence (actual runs, this slice)
+
+| Suite | Result | Scope |
+| --- | --- | --- |
+| SQL suite (`scripts/sql/nonce-store-tests.sql`) | **35/35 PASS** | single database session |
+| Real parallel HTTP trials (`scripts/nonce-concurrency-test.ts`) | **18/18 PASS** | separate sessions per request |
+| Custody/auth CLI self-check | **41/41 PASS** | local Node, in-process |
+| SDK compatibility smoke | **9/9 PASS** | local Node, in-process |
+| Typecheck | clean | — |
+| Worker bundle build (`bun run build`) | **PASS** | bundle only, not executed |
+
+SQL suite covers: first use, replay, fixed-300s server-clock expiry, replay with
+2 s remaining rejected, expired row reclaimed exactly once, 1-char key accepted,
+key over 64 chars / bad charset / NULL rejected, nonce <32 / >64 / uppercase /
+non-hex / NULL rejected, TTL 1 / 60 / 299 / 301 / 0 / -1 / NULL rejected,
+bounded cleanup of 50 expired rows, sequential same-nonce one winner (labelled
+single-session, not concurrency), PUBLIC + anon + authenticated + service_role
+table privileges absent, RLS enabled and forced, four deny-all policies, routine
+EXECUTE denied to PUBLIC/anon/authenticated and granted to service_role only,
+routine is SECURITY DEFINER with `search_path=pg_catalog`.
+
+Parallel HTTP trials: 8 trials x 6 simultaneous same-nonce requests, exactly one
+winner each; 6 simultaneous distinct nonces all first use; live-nonce replay
+rejected; uppercase nonce rejected; TTL 0, -1, 1, 60, 299, 301, 3600 rejected.
+
+### Managed editor "Build unsuccessful" / "Preview is out of date"
+
+Investigated on latest main:
+
+- `bun run build` (Worker bundle): **PASS**, nitro output generated.
+- Typecheck: clean.
+- Managed preview: serving **HTTP 200** at `/` after refresh.
+- Cause in the dev-server log: stale entries from the earlier slice — reloads of
+  the since-deleted `src/routes/api/public/signer/selftest.ts` and a transient
+  Vite dependency-optimizer miss for `@supabase/supabase-js`
+  (`.vite/deps` file not found, re-optimized on the next start). Both are stale
+  editor state, not a source defect; `src/routes` now contains only the root
+  layout and the operator status page.
+
+Still **not** verified: execution inside a deployed Worker runtime (nothing is
+deployed). No wallet/signing endpoints, caller secrets, wrapping keys, funds or
+mainnet exist.

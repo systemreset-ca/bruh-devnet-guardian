@@ -18,9 +18,12 @@
  */
 import type { NonceConsumer } from "./request-auth.server";
 
-/** Hard TTL bounds, mirrored by the database routine. */
-const MIN_TTL_SECONDS = 1;
-const MAX_TTL_SECONDS = 300;
+/**
+ * Fixed retention, mirrored exactly by the database routine, which rejects any
+ * other value. A shorter window would let a nonce be reclaimed while the
+ * verifier's 60-second timestamp window still accepts the same request.
+ */
+const FIXED_TTL_SECONDS = 300;
 
 /**
  * Returns an atomic durable nonce consumer, or `null` when the backend is not
@@ -36,19 +39,15 @@ export async function getDurableNonceConsumer(): Promise<NonceConsumer | null> {
   return async ({ keyId, nonce, now, expiresAt }) => {
     // Derive the TTL from the verifier's own window; never from a caller value.
     const ttlSeconds = Math.ceil((expiresAt - now) / 1000);
-    if (
-      !Number.isFinite(ttlSeconds) ||
-      ttlSeconds < MIN_TTL_SECONDS ||
-      ttlSeconds > MAX_TTL_SECONDS
-    ) {
-      // Fail closed rather than clamping to a longer-lived record.
+    if (ttlSeconds !== FIXED_TTL_SECONDS) {
+      // Fail closed rather than clamping or requesting a shorter retention.
       throw new Error("nonce_ttl_out_of_range");
     }
 
     const { data, error } = await supabaseAdmin.rpc("consume_signer_nonce", {
       p_key_id: keyId,
       p_nonce: nonce,
-      p_ttl_seconds: ttlSeconds,
+      p_ttl_seconds: FIXED_TTL_SECONDS,
     });
 
     // Never log or surface the error body: it can echo request-derived values.
