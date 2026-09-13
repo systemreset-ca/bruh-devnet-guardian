@@ -108,6 +108,15 @@ const report = (await signed.json()) as {
   checkCount?: unknown;
   passedCount?: unknown;
   checks?: Record<string, unknown>;
+  transport?: {
+    attemptCount?: unknown;
+    responseCount?: unknown;
+    statuses?: unknown;
+    httpErrorCount?: unknown;
+    timedOut?: unknown;
+    transportFailed?: unknown;
+    classification?: unknown;
+  };
 };
 console.log(
   `ok=${report.ok === true} network=${String(report.network)} readOnly=${String(report.readOnly)} ` +
