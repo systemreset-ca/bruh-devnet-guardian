@@ -3,3 +3,16 @@
 # Exact historical fingerprints preserve all future-file/commit secret detection.
 69d01688adee4a99d27da4187c13c10b71e48a5b:.env:generic-api-key:2
 69d01688adee4a99d27da4187c13c10b71e48a5b:.env:generic-api-key:5
+
+# Reviewed nonce SQL test labels and synthetic inputs; no caller credential.
+7d45394a6eabc6dcfff6ac01bdbe52be7691db46:scripts/sql/nonce-store-tests.sql:generic-api-key:86
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:19
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:23
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:37
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:38
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:53
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:65
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:69
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:77
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:85
+a8e48ea4f022f4df2480935b44761a478b607d8c:scripts/sql/nonce-store-tests.sql:generic-api-key:87
