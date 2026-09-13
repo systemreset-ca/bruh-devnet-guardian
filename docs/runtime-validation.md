@@ -236,3 +236,55 @@ This project can be connected to its **own separate repository** via
 **Settings → GitHub → Connect to GitHub** in the project editor. Each Lovable
 project maps to a distinct repository, so connecting BRUH Devnet Signer does not
 affect or disconnect the BRUH (`bruhlegends`) repository connection.
+
+## Nonce RPC alignment (proposed, NOT applied) — 2026-09-13
+
+### Process correction
+The previous durable-nonce migration was applied immediately. That was out of
+order: the source/test report should precede any Cloud application. No further
+schema change has been applied in this slice. The alignment SQL below is a
+proposal only, held for the owner's source/test review.
+
+### Applied state (unchanged in this slice)
+- `public.signer_nonces` exists, RLS enabled and forced, four deny-all policies.
+- `public.consume_signer_nonce(text,text,integer)` exists as SECURITY DEFINER
+  with `search_path = public`, accepting `ttl_seconds` in the range 1–300, key
+  regex `^[A-Za-z0-9_.:-]{8,64}$`, nonce regex `^[A-Za-z0-9_-]{16,128}$`.
+- EXECUTE granted to `service_role` only; table privileges revoked from
+  `anon`, `authenticated`, `service_role` (PUBLIC not yet revoked explicitly).
+- No caller secret or key ID is configured, so no request can authenticate.
+
+### Proposed change (`docs/proposed-migration-nonce-v2.sql`)
+- Fixed retention: any `ttl_seconds` other than `300` raises. A 1-second TTL
+  would let a nonce be reclaimed while the verifier's 60-second timestamp
+  window is still valid, permitting replay.
+- `key_id` regex aligned to the verifier: `^[A-Za-z0-9._-]{1,64}$`.
+- `nonce` regex aligned to canonical lowercase hex: `^[0-9a-f]{32,64}$`.
+- `SET search_path = pg_catalog`, every table reference schema-qualified and
+  built-ins called as `pg_catalog.*`, so `pg_temp` cannot shadow anything.
+- `REVOKE ALL ... FROM PUBLIC` on both the table and the routine, in addition
+  to the API roles.
+
+Exact SQL and grants: `docs/proposed-migration-nonce-v2.sql` (verbatim, will be
+applied byte-for-byte if approved).
+
+### Source changes applied in this slice (no schema, no endpoints, no secrets)
+- `request-auth.server.ts`: nonce header must be canonical lowercase hex
+  (`^[0-9a-f]{32,64}$`, case-sensitive); no normalisation of caller input.
+- `nonce-store.server.ts`: retention is the fixed 300 seconds; the adapter
+  fails closed if the verifier window is not exactly 300s (never clamps).
+
+### Test results
+- CLI custody/auth suite: 45/45 PASS, including new checks — request accepted
+  at 58s age (2s of window left), replay with 2s of window remaining rejected,
+  retention (300s) exceeds the timestamp window (60s), verifier requests
+  exactly 300s retention, non-canonical uppercase hex nonce rejected.
+- SDK smoke: 9/9 PASS. Typecheck: clean. Production Worker bundle build: PASS.
+- SQL suite `scripts/sql/nonce-store-tests.sql` now carries 30 assertions,
+  including replay-with-2s-remaining, TTL 60/299/301 rejected, PUBLIC role has
+  no table privileges and cannot execute, and routine `search_path=pg_catalog`.
+  These SQL assertions have NOT been run: they assert the proposed routine, and
+  no schema change was applied. They will be run immediately after approval.
+
+### Still unverified
+Execution inside a deployed Worker runtime (nothing deployed).
