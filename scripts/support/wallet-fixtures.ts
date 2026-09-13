@@ -44,9 +44,22 @@ export function createInMemoryWalletStore(): WalletStore & {
   const byScope = new Map<string, WalletRecord>();
   let attemptedInserts = 0;
 
+  const identityKey = (chatId: string, userId: string) => `${chatId}|${userId}|devnet`;
+
   return {
     async findByScope(scope) {
       return byScope.get(scopeKey(scope)) ?? null;
+    },
+    async findByTelegramIdentity(identity) {
+      for (const row of byScope.values()) {
+        if (
+          identityKey(row.scope.telegramChatId, row.scope.telegramUserId) ===
+          identityKey(identity.telegramChatId, identity.telegramUserId)
+        ) {
+          return { walletId: row.walletId, scope: row.scope };
+        }
+      }
+      return null;
     },
     async insertIfAbsent(candidate) {
       attemptedInserts += 1;
@@ -67,11 +80,71 @@ export function createFailingWalletStore(): WalletStore {
     async findByScope() {
       throw new Error("store down");
     },
+    async findByTelegramIdentity() {
+      throw new Error("store down");
+    },
     async insertIfAbsent() {
       throw new Error("store down");
     },
   };
 }
+
+/**
+ * Store double that returns an arbitrary (possibly malformed or foreign) row,
+ * to prove the service re-validates whatever a store hands back.
+ */
+export function createRowInjectingWalletStore(input: {
+  find?: unknown;
+  identity?: { walletId: string; scope: WalletScope } | null;
+  insert?: unknown;
+  created?: boolean;
+}): WalletStore {
+  return {
+    async findByScope() {
+      return (input.find ?? null) as WalletRecord | null;
+    },
+    async findByTelegramIdentity() {
+      return input.identity ?? null;
+    },
+    async insertIfAbsent(candidate) {
+      return {
+        created: input.created ?? true,
+        record: (input.insert ?? candidate) as WalletRecord,
+      };
+    },
+  };
+}
+
+/**
+ * Structurally realistic SYNTHETIC envelope for SQL fixtures: correct key set,
+ * correct canonical base64 lengths (12-byte IVs, 48-byte AES-GCM outputs) and a
+ * base58 32-byte address. The bytes are random padding — this is NOT a real
+ * key, not a real ciphertext and cannot be decrypted by anything.
+ */
+export function syntheticEnvelopeFixture(input: {
+  walletId: string;
+  groupId: string;
+  membershipId: string;
+  address: string;
+  wrappingKeyVersion: string;
+}) {
+  const b64 = (length: number) =>
+    Buffer.from(webcrypto.getRandomValues(new Uint8Array(length))).toString("base64");
+  return {
+    version: 1 as const,
+    walletId: input.walletId,
+    groupId: input.groupId,
+    membershipId: input.membershipId,
+    network: "devnet" as const,
+    address: input.address,
+    wrappingKeyVersion: input.wrappingKeyVersion,
+    seedIv: b64(12),
+    wrappingIv: b64(12),
+    encryptedSeed: b64(48),
+    wrappedDataKey: b64(48),
+  };
+}
+
 
 /** MOCK trusted-approval callback (fixture, not real membership proof). */
 export function mockAuthorizer(
