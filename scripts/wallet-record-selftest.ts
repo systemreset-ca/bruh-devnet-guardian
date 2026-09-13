@@ -470,6 +470,6 @@ for (const [name, row] of badWinner) {
 
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log(
-  "NOTE: synthetic envelope fixtures are random padding, not real keys or ciphertexts; membership approvals are mocks, not real BRUH proof.",
+  "NOTE: every service-accepted row here carries an ACTUAL throwaway sealed envelope from an ephemeral vault, so authenticated decryption is really exercised; purely structural synthetic fixtures are used only for rejection cases and in the SQL suite, and are NOT crypto proof. Membership approvals are mocks, not real BRUH proof.",
 );
 if (fail > 0) process.exit(1);
