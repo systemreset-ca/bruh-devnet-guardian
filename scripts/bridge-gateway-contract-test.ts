@@ -121,7 +121,8 @@ async function verify(input: {
       signRefused = true;
     }
     check(`signing refuses ${path}`, signRefused);
-    check(`verification refuses ${path}`, !(await verify({ path })));
+    const headers = signBridgeRequest({ secret: SECRET, keyId: KEY_ID, path: PROVISION, rawBody: PAYLOAD, now: NOW });
+    check(`verification refuses ${path}`, !(await verify({ path, headers })));
   }
 }
 
