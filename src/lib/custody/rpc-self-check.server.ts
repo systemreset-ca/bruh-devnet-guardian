@@ -9,7 +9,14 @@
  * Hard constraints:
  *  - Endpoint is server-owned and pinned in source; no caller/client input,
  *    no arbitrary endpoint, no provider key (these three calls need none).
- *  - Sender/recipient/reference keys are ephemeral, memory-only and zeroed.
+ *  - Sender/recipient/reference keys are ephemeral and memory-only. The check
+ *    reports `ephemeralInputSeedsCleared`, which means exactly this: the seed
+ *    buffers this module allocated as key input were overwritten with zeros.
+ *    It is NOT a claim that all key material is erased from memory. JavaScript
+ *    and the wallet SDK give no such guarantee: derived key objects, internal
+ *    SDK copies, string values and garbage-collected or relocated buffers stay
+ *    outside this module's control. Clearing input seeds is defence-in-depth,
+ *    not proof of erasure.
  *  - No airdrop, no funding, no sendTransaction, no broadcast: the transport
  *    wrapper hard-fails if any write method is ever attempted.
  *  - Result is booleans and counts only: never an address, key byte, blockhash,
@@ -54,7 +61,7 @@ export async function runReadOnlyRpcSelfCheck(
     draftFieldsPreserved: false,
     threeReadCallsOnly: false,
     noBroadcastAttempted: true,
-    ephemeralKeysZeroed: false,
+    ephemeralInputSeedsCleared: false,
   };
 
   let calls = 0;
@@ -77,7 +84,8 @@ export async function runReadOnlyRpcSelfCheck(
     return transport(input, init);
   };
 
-  // Seeds are held locally so they can actually be zeroed: web3.js
+  // Seeds are held locally so the input buffers can actually be overwritten:
+  // web3.js
   // `Keypair.secretKey` hands back a copy, so zeroing that proves nothing.
   const seeds = [new Uint8Array(32), new Uint8Array(32), new Uint8Array(32)];
   for (const seed of seeds) crypto.getRandomValues(seed);
@@ -130,7 +138,7 @@ export async function runReadOnlyRpcSelfCheck(
     // Opaque: provider errors and responses are never surfaced.
   } finally {
     for (const seed of seeds) seed.fill(0);
-    checks["ephemeralKeysZeroed"] = seeds.every((seed) => seed.every((b) => b === 0));
+    checks["ephemeralInputSeedsCleared"] = seeds.every((seed) => seed.every((b) => b === 0));
   }
 
   const entries = Object.entries(checks);
