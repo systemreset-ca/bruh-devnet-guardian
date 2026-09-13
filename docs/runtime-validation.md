@@ -473,3 +473,46 @@ slice (source-only change; the applied V2 routine already enforces
 
 Not published. Deployed Worker execution still unverified. No wrapping keys,
 wallet routes, funds or mainnet.
+
+## DEPLOYED WORKER EVIDENCE (captured, diagnostic now disabled)
+
+Reviewed GitHub head at publish: `f6c558cb804ff0c91ed6bc47ee4eeefd4c254000`.
+Published host: `bruh-devnet-guardian.lovable.app` (published by Codex, not the
+agent).
+
+This is the first evidence in this project about execution inside the **deployed
+Worker runtime**. It is separate from, and does not reuse, any local CLI
+test-run evidence recorded above.
+
+`scripts/live-diagnostic-probe.ts` (trusted environment, injected credentials,
+prints status/booleans/counts only — never the secret, key ID, signature, nonce,
+headers or body):
+
+- `status=200`, `ok=true`, `network=devnet`, `broadcast=false`, `checks=9/9`
+- PASS: aesGcmEnvelopeSealed, aesGcmEnvelopeAuthenticated,
+  aadScopeBindingEnforced, tamperedCiphertextRejected, solTransferSignedOffline,
+  ed25519SignatureVerifies, singleSystemTransferInstruction,
+  senderMismatchRejected, nonDevnetRejected
+
+`scripts/live-diagnostic-denials.ts` — **3/3 PASS**:
+
+- `deployed_unauthenticated_post_denied` (status=401)
+- `deployed_signed_request_accepted` (status=200)
+- `deployed_identical_replay_denied` (status=401) — the durable nonce store
+  rejected a byte-identical replay of one valid signed request on the deployed
+  runtime.
+
+No RPC, no broadcast, no funding, no wallet provisioning occurred. No request
+credential, header or body was printed or logged at any point.
+
+Immediately after capture, `SIGNER_DIAGNOSTIC_ENABLED` was set to `"false"`
+through the platform secret manager (name and the literal value `false` only;
+the caller secret and key ID were never read, printed or touched). The
+diagnostic route therefore returns 404 for everyone. `SIGNER_CALLER_SECRET` and
+`SIGNER_CALLER_KEY_ID` remain stored, unused and unrevealed.
+
+Operator console: a "Verification evidence" panel now reports local test-run
+proof and deployed-runtime proof as separate rows, plus the disabled diagnostic
+and the fixtures-only status of third-party sign-in verification.
+
+Source SHA before this commit: SEE BELOW.
