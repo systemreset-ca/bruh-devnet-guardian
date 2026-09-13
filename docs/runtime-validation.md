@@ -934,3 +934,79 @@ mainnet.
 
 Source SHA before this slice: a1ea30acdfbe9a3b963456e870e7d9d947bd0adc (this
 slice auto-committed on top).
+
+## Isolated signer bridge receiver (SOURCE ONLY, DEFAULT DISABLED)
+
+Ported from the Codex-reviewed public BRUH source at commit
+`400fa34a5dff899091b646a6d172feda97e65dd0` on `codex/devnet-custody-core`
+(`services/custody-signer/bridge-auth.ts`, `services/custody-signer/bridge-receiver.ts`,
+`docs/decisions/0007-isolated-signer-bridge.md`). Only module filenames/import
+paths were adapted; the upstream repository was not modified.
+
+Modules:
+- `src/lib/custody/bridge-auth.server.ts` — Ed25519 service authentication.
+  Scheme `BRUH-DEVNET-BRIDGE-v1`; canonical binding of scheme, expected key ID,
+  POST, one of two fixed paths (provision, membership — no withdrawal, export or
+  arbitrary signing path), timestamp, 128-bit nonce and the exact raw-body
+  SHA-256 digest. 8 KiB cap, 60 s freshness re-checked after the claim, atomic
+  durable nonce claim with fixed 300 s retention, uniform opaque denial, nothing
+  logged. Only the PUBLIC verification key is exchanged between projects: no
+  shared HMAC secret, no elevated service key, and the diagnostic caller secret
+  is never involved.
+- `src/lib/wallets/bridge-receiver.server.ts` — fixed POST
+  `/api/internal/custody/provision`, 8 KiB streamed cap, exact 4-key payload
+  (`version: 1`, `telegram_init_data`, `telegram_chat_id`, `membership_approval`
+  with approved/groupId/membershipId/telegramChatId/telegramUserId). One nonce
+  claim precedes all Telegram, approval and vault work. The verified Telegram
+  user must equal the signed approval's user; initData alone never proves group
+  membership — the authority is BRUH's server-resolved non-banned membership
+  snapshot plus the service signature. Responses are rebuilt from the exact
+  frozen devnet public metadata shape; envelope fields, unfreezing and mainnet
+  replies are refused, all responses are `no-store`, failures carry no text.
+- `src/lib/wallets/provisioning.server.ts` — refactored: the post-authorization
+  logic is now the shared `provisionVerifiedScope(scope, vault, store)` core.
+  The existing HMAC + pinned-Telegram + membership-callback service delegates to
+  it unchanged, and the bridge receiver reaches it only through a
+  bridge-verified approval. There is no HMAC bypass and no auth-bypass flag. All
+  record parsing, envelope structural validation, authenticated decryption
+  (`vault.validate`), one-wallet-per-Telegram-identity, inconsistent-mapping
+  refusal and first-writer-wins race behaviour are preserved.
+- `src/routes/api/internal/custody/provision.ts` — DEFAULT DISABLED.
+  `BRUH_BRIDGE_ENABLED` must be exactly "true" (otherwise 404). Fails closed
+  with no fallback when `BRUH_BRIDGE_CALLER_KEY_ID`,
+  `BRUH_BRIDGE_CALLER_PUBLIC_KEY` (pinned BRUH public key, 64 hex), the durable
+  nonce store, the production wrapping key or the wallet store is absent. Names
+  only; none of these is configured. Telegram uses the pinned production
+  Ed25519 verifier.
+
+Tests (offline):
+- `scripts/bridge-receiver-selftest.ts` — 102/102 PASS. Disabled-by-default 404,
+  happy path and exact public response shape, configuration failures, signature
+  failures (other service key, key-ID substitution, cross-path signature, body
+  tampering, stale/future timestamp, GET, unsigned), replay denial with exactly
+  one nonce claim, payload contract (unknown version, extra fields, chat/user
+  mismatch, non-canonical and out-of-range IDs, oversized initData, 8 KiB cap),
+  mandatory Telegram binding, provisioning-result contract (no envelope fields,
+  no unfrozen or mainnet reply, denial never becomes a 200), and bridge-verified
+  approvals driven through the real shared core with an ephemeral wrapping key:
+  idempotent repeat, refused remapped membership, concurrent approvals yielding
+  one wallet, fail-closed on absent wrapping key/store.
+- `scripts/bridge-gateway-contract-test.ts` — 51/51 PASS. Public-key-only
+  exchange, path allowlist, canonical binding, header set, clock window with
+  post-claim freshness, durable claim contract (exactly 300 s requested, no
+  claim on a refused request), and payload envelope/cap.
+
+Preserved suites, all green after the refactor: wallet provisioning 67/67,
+wallet record/envelope 94/94, wallet SQL (PGlite) 164/164, custody/auth 45/45,
+Telegram 27/27, nonce boundary 14/14, crypto probe 28/28, RPC client 89/89, RPC
+diagnostic 51/51, SDK smoke 9/9. `tsgo --noEmit` clean, `bun run build` PASS.
+
+Limitations: service signatures are ACTUAL ephemeral Ed25519 signatures, but
+Telegram verification and membership approvals are fixtures — this is NOT real
+Telegram, real BRUH membership or deployed-runtime proof. The route is not
+enabled or configured, the wallet schema is still unapplied, no live
+provisioning, no funds, no deposits, no signing, no broadcast, no mainnet. The
+diagnostic kill switch remains "false".
+
+Source SHA before this slice: fa1fca32b9863838f497a9c0ebf0e2ba760d110a (this
+slice auto-committed on top).
