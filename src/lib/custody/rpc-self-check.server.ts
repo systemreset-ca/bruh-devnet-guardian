@@ -242,7 +242,7 @@ export async function runReadOnlyRpcSelfCheck(
       feeCapLamports: FEE_CAP_LAMPORTS,
     };
 
-    const rpc = new DevnetHttpSolRpc(DIAGNOSTIC_RPC_ENDPOINT, countingTransport);
+    const rpc = new DevnetHttpSolRpc(endpoint, countingTransport);
     // prepare() pins genesis, reads a finalized blockhash and checks the
     // message fee against the reserved cap. Any failure throws opaquely.
     const prepared = await rpc.prepare(draft);
