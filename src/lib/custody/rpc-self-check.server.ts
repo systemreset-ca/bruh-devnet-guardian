@@ -283,6 +283,7 @@ export async function runReadOnlyRpcSelfCheck(
       timedOut,
       transportFailed,
       illegalInvocation,
+      failureFingerprint,
       classification,
     },
   };
