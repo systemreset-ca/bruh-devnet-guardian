@@ -1092,3 +1092,48 @@ mainnet. Production policy callbacks remain absent and fail closed.
 Source SHA of the published deployment under test:
 6299faac295ca0367871dd54fe70501c16dcea2b (docs-only diff on top of the reviewed
 01d3311198fe0a5010d5dd166e975355adaaed47). This evidence is committed on top.
+
+## Host fetch receiver binding fix (SOURCE ONLY, DIAGNOSTIC STILL OFF)
+
+Network policy is unchanged: same pinned endpoint, same three read methods, same
+hard write-method denial, same caps, same opaque adapter, no fallback transport.
+
+Change: both production defaults previously used an extracted, unbound `fetch`
+reference (`transport: typeof fetch = fetch`) in `runReadOnlyRpcSelfCheck` and in
+the `DevnetHttpSolRpc` constructor. Both now use an explicit arrow,
+`(input, init) => globalThis.fetch(input, init)`, so the call keeps `globalThis`
+as its receiver. Some Worker hosts reject a wrong receiver with
+`TypeError: Illegal invocation`. This is a plausible root-cause match for the
+failed live trial, but it is NOT claimed as the actual cause: only a further
+bounded live trial can establish that.
+
+The counting transport now also records a single fixed boolean,
+`transport.illegalInvocation`, set only when the caught error is a `TypeError`
+whose message is exactly "Illegal invocation". No raw error name, message, body,
+header, endpoint or provider text is ever recorded or emitted; the trusted live
+probe prints and bound-checks that boolean along with the other metadata.
+
+Also in this slice:
+- the bridge route returns 404 with `cache-control: no-store` from the disabled
+  gate BEFORE constructing the durable nonce dependency or touching any store or
+  key lookup;
+- the `provisioning.server.ts` header comment is corrected: the only HTTP route
+  importing it is the default-disabled, unconfigured bridge route, via the shared
+  `provisionVerifiedScope` core.
+
+Tests: `scripts/http-rpc-selftest.ts` 96/96 (up from 89), including a local
+mocked branded host fetch that throws `TypeError("Illegal invocation")` unless
+`this === globalThis` — both production defaults call it successfully with the
+correct receiver, while an unbound extracted reference against the same host is
+classified `transport_failure` with `illegalInvocation === true` and no raw error
+text in the metadata. All other suites unchanged and green: custody 45/45,
+Telegram 27/27, nonce boundary 14/14, crypto probe 28/28, RPC diagnostic 51/51,
+wallet provisioning 67/67, wallet record 94/94, bridge receiver 102/102, bridge
+gateway contract 51/51, wallet SQL PGlite PASS, SDK smoke PASS. `tsgo --noEmit`
+clean, `bun run build` PASS. Every response in these suites is a local mock — no
+network call was made and no live request was repeated.
+
+`SIGNER_DIAGNOSTIC_ENABLED` stays "false" pending source review. No wallet enable
+flag, schema application, wrapping key, provisioning activation, funds or
+mainnet. Source SHA before this slice: 235cf4fa73ee20bbbf3c419d31b89133ce34e273
+(this slice auto-committed on top). Nothing published by me.

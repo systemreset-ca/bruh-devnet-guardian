@@ -115,6 +115,7 @@ const report = (await signed.json()) as {
     httpErrorCount?: unknown;
     timedOut?: unknown;
     transportFailed?: unknown;
+    illegalInvocation?: unknown;
     classification?: unknown;
   };
 };
@@ -129,7 +130,7 @@ console.log(
   `transport classification=${String(meta.classification)} attempts=${String(meta.attemptCount)} ` +
     `responses=${String(meta.responseCount)} statuses=${JSON.stringify(meta.statuses ?? [])} ` +
     `httpErrors=${String(meta.httpErrorCount)} timedOut=${String(meta.timedOut)} ` +
-    `transportFailed=${String(meta.transportFailed)}`,
+    `transportFailed=${String(meta.transportFailed)} illegalInvocation=${String(meta.illegalInvocation)}`,
 );
 check(
   "transport metadata is bounded (numbers, booleans and one fixed label only)",
@@ -139,6 +140,7 @@ check(
     typeof meta.httpErrorCount === "number" &&
     typeof meta.timedOut === "boolean" &&
     typeof meta.transportFailed === "boolean" &&
+    typeof meta.illegalInvocation === "boolean" &&
     ["no_attempt", "responded", "http_error", "timeout", "transport_failure"].includes(
       String(meta.classification),
     ),
