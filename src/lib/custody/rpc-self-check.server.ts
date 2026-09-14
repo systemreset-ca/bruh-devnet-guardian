@@ -220,9 +220,14 @@ export async function runReadOnlyRpcSelfCheck(
     Keypair,
   ];
   try {
-    const url = new URL(DIAGNOSTIC_RPC_ENDPOINT);
+    // Server-only configuration: built internally from BRUH_DEVNET_API_KEY, or
+    // an explicit SOLANA_RPC_URL that must itself be devnet Helius over HTTPS.
+    // No public-RPC fallback, no mainnet key. Throws opaquely when unavailable.
+    const endpoint = resolveDevnetRpcEndpoint(env);
+    const url = new URL(endpoint);
     checks["endpointPinnedHttps"] =
       url.protocol === "https:" && !url.username && !url.password && !url.hash;
+    checks["endpointHostIsDevnetHelius"] = url.hostname === HELIUS_DEVNET_HOST;
 
     const draft: SolTransferDraft = {
       walletId: uuid(),
