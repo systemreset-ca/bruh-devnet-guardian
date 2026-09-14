@@ -512,6 +512,89 @@ for (const [name, raw] of [
   }
 }
 
+// -------------------------------------------- known failure fingerprints only
+{
+  const { classifyTransportFailure } = await import("../src/lib/custody/rpc-self-check.server");
+  const typeError = (message: string) => new TypeError(message);
+  const withCause = (code: string) => Object.assign(new Error("x"), { cause: { code } });
+  const cases: Array<[string, unknown, string]> = [
+    [
+      "real host illegal invocation message with suffix and docs URL",
+      typeError(
+        "Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/ for details.",
+      ),
+      "illegal_invocation",
+    ],
+    ["exact two-word illegal invocation", typeError("Illegal invocation"), "illegal_invocation"],
+    [
+      "unsupported redirect mode",
+      typeError(
+        'Invalid redirect value, must be one of "follow" or "manual" ("error" won\'t be implemented since it does not make sense at the edge; use "manual" and check the response status code).',
+      ),
+      "unsupported_redirect_mode",
+    ],
+    [
+      "fetch outside a request context",
+      new Error("Some functionality, such as asynchronous I/O, is not available: request outside of a request context"),
+      "outside_request_context",
+    ],
+    [
+      "disallowed global-scope operation",
+      new Error("Disallowed operation called within global scope"),
+      "outside_request_context",
+    ],
+    ["invalid abort signal", typeError("Invalid AbortSignal provided"), "invalid_abort_signal"],
+    ["abort", Object.assign(new Error("x"), { name: "AbortError" }), "aborted"],
+    ["dns failure", withCause("ENOTFOUND"), "dns_failure"],
+    ["dns retry failure", withCause("EAI_AGAIN"), "dns_failure"],
+    ["connection refused", withCause("ECONNREFUSED"), "connection_refused"],
+    ["tls failure", withCause("CERT_HAS_EXPIRED"), "tls_failure"],
+    ["other type error", typeError("something else entirely"), "type_error_other"],
+    ["unrecognised failure", new Error("mystery"), "unknown"],
+    ["non-object throw", "boom", "unknown"],
+  ];
+  for (const [label, error, expected] of cases) {
+    check(`fingerprint: ${label}`, classifyTransportFailure(error) === expected);
+  }
+}
+{
+  const original = globalThis.fetch;
+  globalThis.fetch = (() => {
+    throw new TypeError(
+      'Invalid redirect value, must be one of "follow" or "manual" ("error" won\'t be implemented since it does not make sense at the edge).',
+    );
+  }) as unknown as typeof fetch;
+  try {
+    const meta = (await runReadOnlyRpcSelfCheck()).transport;
+    check("redirect-mode rejection is fingerprinted", meta.failureFingerprint === "unsupported_redirect_mode");
+    check("redirect-mode rejection classifies as transport failure", meta.classification === "transport_failure");
+    check("redirect-mode rejection makes no request", meta.responseCount === 0 && meta.attemptCount === 1);
+    check("redirect-mode rejection is not an illegal invocation", meta.illegalInvocation === false);
+    check(
+      "no raw provider or error text is carried with the fingerprint",
+      !/redirect value|typeerror|cloudflare|api\.devnet/i.test(JSON.stringify(meta)),
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+{
+  const original = globalThis.fetch;
+  globalThis.fetch = (() => {
+    throw new TypeError(
+      "Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/",
+    );
+  }) as unknown as typeof fetch;
+  try {
+    const meta = (await runReadOnlyRpcSelfCheck()).transport;
+    check("long illegal-invocation message is still detected", meta.illegalInvocation === true);
+    check("long illegal-invocation message fingerprint", meta.failureFingerprint === "illegal_invocation");
+    check("no docs URL is carried", !JSON.stringify(meta).includes("http"));
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 console.log(
   "NOTE: every response above is a local mock transport. No real network call, no funding, no broadcast, and NO deployed-Worker RPC proof.",
