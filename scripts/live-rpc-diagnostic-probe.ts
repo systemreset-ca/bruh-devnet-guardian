@@ -108,6 +108,7 @@ const report = (await signed.json()) as {
   checkCount?: unknown;
   passedCount?: unknown;
   checks?: Record<string, unknown>;
+  config?: Record<string, unknown>;
   transport?: {
     attemptCount?: unknown;
     responseCount?: unknown;
@@ -164,6 +165,10 @@ check(
       String(meta.classification),
     ),
 );
+for (const [name, value] of Object.entries(report.config ?? {})) {
+  // Booleans only: presence and devnet compatibility. Never a key, URL or host.
+  console.log(`  config ${name}=${typeof value === "boolean" ? String(value) : "NON_BOOLEAN"}`);
+}
 for (const [name, value] of Object.entries(report.checks ?? {})) {
   check(name, value === true);
 }
