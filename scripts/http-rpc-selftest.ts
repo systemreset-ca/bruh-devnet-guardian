@@ -11,7 +11,10 @@ import {
   signSolTransfer,
   type SolTransferApproval,
 } from "../src/lib/custody/sol-transfer.server";
-import { runReadOnlyRpcSelfCheck } from "../src/lib/custody/rpc-self-check.server";
+import {
+  DIAGNOSTIC_RPC_ENDPOINT,
+  runReadOnlyRpcSelfCheck,
+} from "../src/lib/custody/rpc-self-check.server";
 
 let pass = 0;
 let fail = 0;
@@ -416,6 +419,86 @@ for (const [name, raw] of [
   const invalid: typeof fetch = async () => new Response("{not json", { status: 200 });
   const meta = (await runReadOnlyRpcSelfCheck(invalid)).transport;
   check("malformed 200 response still classifies as responded", meta.classification === "responded" && meta.statuses[0] === 200);
+}
+
+// --- Host fetch receiver binding -------------------------------------------
+// A "branded" global fetch that behaves like a strict Worker host: it throws
+// TypeError("Illegal invocation") unless it is called with globalThis as the
+// receiver. The production defaults must therefore call globalThis.fetch(...)
+// explicitly rather than pass an extracted, unbound reference.
+{
+  const original = globalThis.fetch;
+  let brandedId = 0;
+  let receiverOk = false;
+  const branded = function (this: unknown, _input: RequestInfo | URL, init?: RequestInit) {
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    receiverOk = true;
+    let method = "";
+    try {
+      method = String((JSON.parse(String(init?.body ?? "{}")) as { method?: unknown }).method);
+    } catch {
+      method = "";
+    }
+    const result =
+      method === "getGenesisHash"
+        ? DEVNET_GENESIS
+        : method === "getLatestBlockhash"
+          ? { context: { slot: 1 }, value: { blockhash: "11111111111111111111111111111111", lastValidBlockHeight: 100 } }
+          : "5000";
+    return Promise.resolve(
+      new Response(JSON.stringify({ jsonrpc: "2.0", id: ++brandedId, result }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  } as unknown as typeof fetch;
+  globalThis.fetch = branded;
+  try {
+    const report = await runReadOnlyRpcSelfCheck();
+    check("default self-check transport calls host fetch with globalThis as receiver", receiverOk);
+    check(
+      "default self-check transport is not rejected as an illegal invocation",
+      report.transport.illegalInvocation === false && report.transport.transportFailed === false,
+    );
+    check("default self-check transport observes responses", report.transport.responseCount > 0);
+
+    receiverOk = false;
+    brandedId = 0;
+    const rpc = new DevnetHttpSolRpc(DIAGNOSTIC_RPC_ENDPOINT);
+    let adapterOk = true;
+    try {
+      await rpc.assertDevnetGenesis();
+    } catch {
+      adapterOk = false;
+    }
+    check("default adapter transport calls host fetch with globalThis as receiver", receiverOk && adapterOk);
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+// An unbound extracted reference against the same branded host must be the
+// case that fails, and it must be reported only as a fixed boolean.
+{
+  const original = globalThis.fetch;
+  const branded = function (this: unknown) {
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    return Promise.resolve(new Response("{}", { status: 200 }));
+  } as unknown as typeof fetch;
+  globalThis.fetch = branded;
+  try {
+    const unbound: typeof fetch = globalThis.fetch;
+    const extracted = (0, unbound) as typeof fetch;
+    const meta = (await runReadOnlyRpcSelfCheck((input, init) => extracted.call(undefined, input, init))).transport;
+    check("unbound host fetch is classified as a transport failure", meta.classification === "transport_failure");
+    check("illegal invocation is reported as a fixed boolean only", meta.illegalInvocation === true);
+    check(
+      "no raw error text is carried in transport metadata",
+      !JSON.stringify(meta).toLowerCase().includes("typeerror"),
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

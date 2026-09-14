@@ -44,6 +44,12 @@ export interface RpcTransportMetadata {
   httpErrorCount: number;
   timedOut: boolean;
   transportFailed: boolean;
+  /**
+   * Fixed boolean only: true when the host rejected the fetch receiver
+   * (`TypeError` whose message is exactly "Illegal invocation"). No raw error
+   * name or message text is ever carried.
+   */
+  illegalInvocation: boolean;
   classification:
     | "no_attempt"
     | "responded"
@@ -68,10 +74,13 @@ function uuid(): string {
 }
 
 /**
- * @param transport injected only by tests; production uses global fetch.
+ * @param transport injected only by tests; production uses the host's global
+ * fetch through an explicit arrow so the call keeps `globalThis` as its
+ * receiver. Some Worker hosts reject an extracted, unbound `fetch` with
+ * `TypeError: Illegal invocation`. There is no fallback transport.
  */
 export async function runReadOnlyRpcSelfCheck(
-  transport: typeof fetch = fetch,
+  transport: typeof fetch = (input, init) => globalThis.fetch(input, init),
 ): Promise<RpcSelfCheckReport> {
   const checks: Record<string, boolean> = {
     endpointPinnedHttps: false,
@@ -93,6 +102,7 @@ export async function runReadOnlyRpcSelfCheck(
   let httpErrorCount = 0;
   let timedOut = false;
   let transportFailed = false;
+  let illegalInvocation = false;
   const countingTransport: typeof fetch = async (input, init) => {
     calls += 1;
     let method = "";
@@ -117,6 +127,9 @@ export async function runReadOnlyRpcSelfCheck(
       // Only the failure CLASS is recorded — never the error message or body.
       const name =
         error && typeof error === "object" && "name" in error ? String(error["name"]) : "";
+      if (error instanceof TypeError && error.message === "Illegal invocation") {
+        illegalInvocation = true;
+      }
       if (name === "AbortError" || name === "TimeoutError") timedOut = true;
       else transportFailed = true;
       throw new Error("Custody RPC transport failure.");
@@ -206,6 +219,7 @@ export async function runReadOnlyRpcSelfCheck(
       httpErrorCount,
       timedOut,
       transportFailed,
+      illegalInvocation,
       classification,
     },
   };

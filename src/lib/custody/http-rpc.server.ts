@@ -42,7 +42,10 @@ export class DevnetHttpSolRpc {
   private id = 0;
   constructor(
     private readonly endpoint: string,
-    private readonly transport: typeof fetch = fetch,
+    // Explicit arrow so the host's global fetch keeps `globalThis` as its
+    // receiver: an extracted, unbound `fetch` is rejected by some Worker hosts
+    // with `TypeError: Illegal invocation`. No fallback transport.
+    private readonly transport: typeof fetch = (input, init) => globalThis.fetch(input, init),
   ) {
     let url: URL;
     try {

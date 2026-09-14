@@ -29,6 +29,15 @@ export const Route = createFileRoute("/api/internal/custody/provision")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        // Disabled gate first: no durable dependency is constructed, and no
+        // storage or key lookup happens, before the route is enabled.
+        if (process.env["BRUH_BRIDGE_ENABLED"] !== "true") {
+          return new Response("Not Found", {
+            status: 404,
+            headers: { "cache-control": "no-store" },
+          });
+        }
+
         let consumeNonce = null;
         try {
           consumeNonce = await getDurableNonceConsumer();
