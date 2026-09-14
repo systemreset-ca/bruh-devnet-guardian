@@ -29,6 +29,64 @@ import { DevnetHttpSolRpc, type SolTransferDraft } from "./http-rpc.server";
 export const DIAGNOSTIC_RPC_ENDPOINT = "https://api.devnet.solana.com";
 
 const READ_ONLY_METHODS = new Set(["getGenesisHash", "getLatestBlockhash", "getFeeForMessage"]);
+
+/** Fixed enum values only — never raw error text. */
+export type TransportFailureFingerprint =
+  | "none"
+  | "illegal_invocation"
+  | "unsupported_redirect_mode"
+  | "outside_request_context"
+  | "invalid_abort_signal"
+  | "aborted"
+  | "dns_failure"
+  | "connection_refused"
+  | "tls_failure"
+  | "type_error_other"
+  | "unknown";
+
+const CAUSE_CODES: Record<string, TransportFailureFingerprint> = {
+  ENOTFOUND: "dns_failure",
+  EAI_AGAIN: "dns_failure",
+  ECONNREFUSED: "connection_refused",
+  ECONNRESET: "connection_refused",
+  EPROTO: "tls_failure",
+  ERR_TLS_CERT_ALTNAME_INVALID: "tls_failure",
+  DEPTH_ZERO_SELF_SIGNED_CERT: "tls_failure",
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: "tls_failure",
+  CERT_HAS_EXPIRED: "tls_failure",
+};
+
+/**
+ * Internal-only inspection of the thrown outbound-fetch exception. It returns a
+ * fixed enum member for known fingerprints and never returns, logs or stores the
+ * raw name, message, code, cause, URL, body, header or stack.
+ */
+export function classifyTransportFailure(error: unknown): TransportFailureFingerprint {
+  if (!(error && typeof error === "object")) return "unknown";
+  const name = "name" in error ? String(error["name"]) : "";
+  const message = "message" in error ? String(error["message"]) : "";
+  const lower = message.toLowerCase();
+  const code =
+    "cause" in error && error["cause"] && typeof error["cause"] === "object"
+      ? String((error["cause"] as { code?: unknown }).code ?? "")
+      : "code" in error
+        ? String(error["code"])
+        : "";
+
+  if (name === "AbortError" || name === "TimeoutError") return "aborted";
+  // Prefix match: the real host message continues past the two words and may
+  // append a documentation URL.
+  if (lower.startsWith("illegal invocation")) return "illegal_invocation";
+  if (lower.startsWith("invalid redirect value")) return "unsupported_redirect_mode";
+  if (lower.includes("request outside of a request context")) return "outside_request_context";
+  if (lower.includes("disallowed operation called within global scope"))
+    return "outside_request_context";
+  if (lower.includes("abortsignal")) return "invalid_abort_signal";
+  const mapped = CAUSE_CODES[code];
+  if (mapped) return mapped;
+  if (name === "TypeError") return "type_error_other";
+  return "unknown";
+}
 const FEE_CAP_LAMPORTS = "100000";
 
 /**
