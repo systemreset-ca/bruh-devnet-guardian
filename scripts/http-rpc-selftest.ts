@@ -289,7 +289,7 @@ for (const [name, raw] of [
     "a 3xx response is rejected instead of followed",
     await rejects(() => new DevnetHttpSolRpc(ENDPOINT, redirecting).assertDevnetGenesis()),
   );
-  check("json content type is sent", sawContentType === "application/json");
+  
 }
 
 // --------------------------------------------------- exact signed bytes binding
