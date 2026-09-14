@@ -24,9 +24,14 @@
  */
 import { Keypair } from "@solana/web3.js";
 import { DevnetHttpSolRpc, type SolTransferDraft } from "./http-rpc.server";
-
-/** Server-owned, explicit, pinned. Not configurable by any caller. */
-export const DIAGNOSTIC_RPC_ENDPOINT = "https://api.devnet.solana.com";
+import {
+  HELIUS_DEVNET_HOST,
+  describeDevnetRpcConfig,
+  devnetRpcEnvFromProcess,
+  resolveDevnetRpcEndpoint,
+  type DevnetRpcConfigReport,
+  type DevnetRpcEnv,
+} from "./rpc-endpoint.server";
 
 const READ_ONLY_METHODS = new Set(["getGenesisHash", "getLatestBlockhash", "getFeeForMessage"]);
 
