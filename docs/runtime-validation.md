@@ -1166,3 +1166,44 @@ Interpretation, bounded to safe metadata only:
 - NOT PROVEN: deployed-runtime RPC capability. No value may be substituted from stored records.
 
 `SIGNER_DIAGNOSTIC_ENABLED` set back to `"false"` immediately after this single attempt (name and literal value only; caller credentials untouched). Takes effect live after Codex shutdown publish. No repeated polls.
+
+## Diagnosed cause of the deployed-runtime read failure (source-only)
+
+Evidence method: the outbound fetch options used by the reviewed reader were
+replayed against an isolated, throwaway worker runtime in the build sandbox
+(installed for this diagnosis only and removed afterwards). Only the sanitized
+finding is recorded here; no raw error text, provider response, header, body or
+credential was written to chat, logs, docs or commits.
+
+Concrete, evidenced cause: this runtime **rejects `redirect: "error"` on an
+outbound fetch with a `TypeError` before any request is made**. The identical
+request with `redirect: "manual"` succeeded (HTTP 200), and an explicit
+`AbortSignal` was accepted. That matches the live evidence exactly: 1 attempt,
+0 responses, `timedOut=false`, `transportFailed=true`, and the first read never
+reaching the provider. No provider ban, rate limit or credential problem is
+implied, and none is claimed.
+
+Fix (policy unchanged — redirects are still never followed): the adapter now
+sends `redirect: "manual"` and rejects any 3xx response explicitly. Deviation
+from the reviewed upstream source is documented in the adapter header.
+
+Classifier correction: the failure classifier previously matched the exact
+two-word string "Illegal invocation", so the real host message (which continues
+past those words and may append a documentation URL) would have been missed.
+It now derives a fixed enum, `failureFingerprint`, for KNOWN fingerprints only:
+`none`, `illegal_invocation` (prefix match), `unsupported_redirect_mode`,
+`outside_request_context`, `invalid_abort_signal`, `aborted`, `dns_failure`,
+`connection_refused`, `tls_failure`, `type_error_other`, `unknown`. Raw name,
+message, code, cause, URL, body, header and stack are never carried out. The
+trusted probe prints the fingerprint and asserts it is one fixed enum member.
+
+Tests: reader/classifier suite 119/119 (14 fingerprint cases including the long
+real-host illegal-invocation message with docs URL, the redirect-mode rejection
+end to end, and leak assertions), RPC diagnostic guards 51/51, bridge receiver
+102/102, bridge contract 51/51, wallet record 94/94, wallet provisioning 67/67,
+custody 45/45, nonce boundary 14/14, SDK smoke pass. Types clean, build passes.
+
+Still NOT proven: deployed-runtime network reading. The fix is source-only,
+`SIGNER_DIAGNOSTIC_ENABLED` stays `"false"`, no live attempt was made, and no
+RPC compatibility or wallet readiness is claimed until a reviewed scoped probe
+runs once. No wallet flag, schema, wrapping key, provisioning, funds or mainnet.
