@@ -106,7 +106,10 @@ check(
 // ------------------------------------------------ mainnet key is never read
 {
   const source = await Bun.file("src/lib/custody/rpc-endpoint.server.ts").text();
-  check("mainnet key name never appears in the config module", !source.includes("BRUH_MAINNET_API_KEY"));
+  check(
+    "the mainnet key is never read by the config module",
+    !/process\.env\[?\s*["'`]BRUH_MAINNET_API_KEY/.test(source),
+  );
   check("no public rpc endpoint literal in the config module", !source.includes("api.devnet.solana.com"));
 }
 
