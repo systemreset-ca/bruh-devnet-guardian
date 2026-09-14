@@ -116,6 +116,7 @@ const report = (await signed.json()) as {
     timedOut?: unknown;
     transportFailed?: unknown;
     illegalInvocation?: unknown;
+    failureFingerprint?: unknown;
     classification?: unknown;
   };
 };
