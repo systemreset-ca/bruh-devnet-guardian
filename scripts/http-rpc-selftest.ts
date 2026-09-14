@@ -424,7 +424,7 @@ for (const [name, raw] of [
   const serialized = JSON.stringify(report);
   check("transport metadata leaks no provider error text", !serialized.includes("unreachable") && !serialized.includes("provider.example"));
   check("transport metadata leaks no endpoint", !serialized.includes("solana.com") && !serialized.includes("https://"));
-  check("transport metadata values are numbers, booleans and a fixed label", Object.entries(meta).every(([key, value]) => key === "classification" ? typeof value === "string" : key === "statuses" ? Array.isArray(value) && value.every((v) => typeof v === "number") : typeof value === "number" || typeof value === "boolean"));
+  check("transport metadata values are numbers, booleans and a fixed label", Object.entries(meta).every(([key, value]) => key === "classification" || key === "failureFingerprint" ? typeof value === "string" : key === "statuses" ? Array.isArray(value) && value.every((v) => typeof v === "number") : typeof value === "number" || typeof value === "boolean"));
 }
 {
   const invalid: typeof fetch = async () => new Response("{not json", { status: 200 });
