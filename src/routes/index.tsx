@@ -78,7 +78,7 @@ const evidence: { name: string; tone: "ok" | "warn"; state: string; note: string
   {
     name: "Network / on-chain reads",
     tone: "warn",
-    state: "live check ran: sign-in and safety held, the network read did not succeed",
+    state: "cause found and fixed at source; live reading still not proven",
     note: "A reviewed request-only devnet reader now exists and never creates the wallet SDK connection object that this runtime cannot build. It checks the network fingerprint, takes a settled block reference and confirms the network charge stays inside the reserved allowance. One real read-only check passed in a local test environment. A single bounded live check was then run: the request was reached and protected correctly, but the one outbound attempt received no reply at all and no reply status was ever seen, so live network reading is still NOT proven. Only that safe summary is recorded; no cause is claimed. Nothing is wired to wallets or the chat bot, no send path is reachable, and no value may be substituted from stored records.",
   },
 
