@@ -50,6 +50,12 @@ export interface RpcTransportMetadata {
    * name or message text is ever carried.
    */
   illegalInvocation: boolean;
+  /**
+   * Fixed enum for KNOWN failure fingerprints only. Derived internally from the
+   * thrown exception, but NO raw name, message, code, cause, URL or stack text
+   * is ever carried out of this module.
+   */
+  failureFingerprint: TransportFailureFingerprint;
   classification:
     | "no_attempt"
     | "responded"
