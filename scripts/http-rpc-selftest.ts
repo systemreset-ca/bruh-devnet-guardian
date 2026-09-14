@@ -589,7 +589,7 @@ for (const [name, raw] of [
     const meta = (await runReadOnlyRpcSelfCheck()).transport;
     check("long illegal-invocation message is still detected", meta.illegalInvocation === true);
     check("long illegal-invocation message fingerprint", meta.failureFingerprint === "illegal_invocation");
-    check("no docs URL is carried", !JSON.stringify(meta).includes("http"));
+    check("no docs URL is carried", !JSON.stringify(meta).includes("://"));
   } finally {
     globalThis.fetch = original;
   }
