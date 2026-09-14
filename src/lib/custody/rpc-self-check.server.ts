@@ -24,9 +24,14 @@
  */
 import { Keypair } from "@solana/web3.js";
 import { DevnetHttpSolRpc, type SolTransferDraft } from "./http-rpc.server";
-
-/** Server-owned, explicit, pinned. Not configurable by any caller. */
-export const DIAGNOSTIC_RPC_ENDPOINT = "https://api.devnet.solana.com";
+import {
+  HELIUS_DEVNET_HOST,
+  describeDevnetRpcConfig,
+  devnetRpcEnvFromProcess,
+  resolveDevnetRpcEndpoint,
+  type DevnetRpcConfigReport,
+  type DevnetRpcEnv,
+} from "./rpc-endpoint.server";
 
 const READ_ONLY_METHODS = new Set(["getGenesisHash", "getLatestBlockhash", "getFeeForMessage"]);
 
@@ -131,6 +136,8 @@ export interface RpcSelfCheckReport {
   passedCount: number;
   checks: Record<string, boolean>;
   transport: RpcTransportMetadata;
+  /** Presence and devnet-compatibility booleans only. Never a key or URL. */
+  config: DevnetRpcConfigReport;
 }
 
 function uuid(): string {
@@ -145,9 +152,12 @@ function uuid(): string {
  */
 export async function runReadOnlyRpcSelfCheck(
   transport: typeof fetch = (input, init) => globalThis.fetch(input, init),
+  env: DevnetRpcEnv = devnetRpcEnvFromProcess(),
 ): Promise<RpcSelfCheckReport> {
+  const config = describeDevnetRpcConfig(env);
   const checks: Record<string, boolean> = {
     endpointPinnedHttps: false,
+    endpointHostIsDevnetHelius: false,
     onlyReadOnlyMethodsRequested: false,
     genesisIsDevnet: false,
     finalizedBlockhashObtained: false,
@@ -210,9 +220,14 @@ export async function runReadOnlyRpcSelfCheck(
     Keypair,
   ];
   try {
-    const url = new URL(DIAGNOSTIC_RPC_ENDPOINT);
+    // Server-only configuration: built internally from BRUH_DEVNET_API_KEY, or
+    // an explicit SOLANA_RPC_URL that must itself be devnet Helius over HTTPS.
+    // No public-RPC fallback, no mainnet key. Throws opaquely when unavailable.
+    const endpoint = resolveDevnetRpcEndpoint(env);
+    const url = new URL(endpoint);
     checks["endpointPinnedHttps"] =
       url.protocol === "https:" && !url.username && !url.password && !url.hash;
+    checks["endpointHostIsDevnetHelius"] = url.hostname === HELIUS_DEVNET_HOST;
 
     const draft: SolTransferDraft = {
       walletId: uuid(),
@@ -227,7 +242,7 @@ export async function runReadOnlyRpcSelfCheck(
       feeCapLamports: FEE_CAP_LAMPORTS,
     };
 
-    const rpc = new DevnetHttpSolRpc(DIAGNOSTIC_RPC_ENDPOINT, countingTransport);
+    const rpc = new DevnetHttpSolRpc(endpoint, countingTransport);
     // prepare() pins genesis, reads a finalized blockhash and checks the
     // message fee against the reserved cap. Any failure throws opaquely.
     const prepared = await rpc.prepare(draft);
@@ -275,6 +290,7 @@ export async function runReadOnlyRpcSelfCheck(
     checkCount: entries.length,
     passedCount,
     checks,
+    config,
     transport: {
       attemptCount: calls,
       responseCount: statuses.length,

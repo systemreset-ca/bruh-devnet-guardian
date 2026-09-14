@@ -11,10 +11,16 @@ import {
   signSolTransfer,
   type SolTransferApproval,
 } from "../src/lib/custody/sol-transfer.server";
+import { runReadOnlyRpcSelfCheck } from "../src/lib/custody/rpc-self-check.server";
 import {
-  DIAGNOSTIC_RPC_ENDPOINT,
-  runReadOnlyRpcSelfCheck,
-} from "../src/lib/custody/rpc-self-check.server";
+  devnetRpcEnvFromProcess,
+  resolveDevnetRpcEndpoint,
+} from "../src/lib/custody/rpc-endpoint.server";
+
+// Throwaway configuration for this offline suite only: not a real provider key.
+process.env["BRUH_DEVNET_API_KEY"] = "throwaway-selftest-key-0001";
+delete process.env["SOLANA_RPC_URL"];
+const DIAGNOSTIC_RPC_ENDPOINT = resolveDevnetRpcEndpoint(devnetRpcEnvFromProcess());
 
 let pass = 0;
 let fail = 0;
@@ -363,6 +369,21 @@ for (const [name, raw] of [
   check("self-check output is booleans and counts only", Object.values(report.checks).every((v) => typeof v === "boolean"));
   check("self-check output contains no blockhash", !serialized.includes(BLOCKHASH));
   check("self-check output contains no address-shaped string", !/[1-9A-HJ-NP-Za-km-z]{32,}/.test(serialized));
+  const cfg = report.config;
+  check("self-check reports configuration as booleans only", Object.values(cfg).every((v) => typeof v === "boolean"));
+  check(
+    "self-check configuration reports devnet key present and endpoint resolved",
+    cfg.devnetApiKeyPresent && cfg.devnetApiKeyWellFormed && cfg.endpointResolved,
+  );
+  check(
+    "self-check configuration states no mainnet key and no public fallback",
+    cfg.mainnetKeyUsed === false && cfg.publicRpcFallbackUsed === false,
+  );
+  check(
+    "self-check output contains no api key or provider host",
+    !serialized.includes("throwaway-selftest-key-0001") && !serialized.includes("helius"),
+  );
+  check("endpoint host check passed", report.checks["endpointHostIsDevnetHelius"] === true);
   check("self-check never requested a write method", !calls().some((m) => m === "sendTransaction" || m === "requestAirdrop"));
 }
 {
@@ -384,6 +405,29 @@ for (const [name, raw] of [
   const report = await runReadOnlyRpcSelfCheck(dead);
   check("self-check fails closed when the provider is unavailable", report.ok === false);
   check("unavailable provider still reports cleared ephemeral input seeds", report.checks["ephemeralInputSeedsCleared"] === true);
+}
+
+{
+  const { transport, calls } = transportFor(happy);
+  const missing = await runReadOnlyRpcSelfCheck(transport, {});
+  check("self-check fails closed without devnet configuration", missing.ok === false);
+  check("self-check makes no request without configuration", calls().length === 0 && missing.rpcCallCount === 0);
+  check(
+    "unconfigured self-check reports the absent key",
+    missing.config.devnetApiKeyPresent === false && missing.config.endpointResolved === false,
+  );
+}
+{
+  const { transport, calls } = transportFor(happy);
+  const bad = await runReadOnlyRpcSelfCheck(transport, {
+    devnetApiKey: "throwaway-selftest-key-0001",
+    rpcUrl: "https://mainnet.helius-rpc.com/?api-key=throwaway-selftest-key-0001",
+  });
+  check("mainnet override fails closed with no request", bad.ok === false && calls().length === 0);
+  check(
+    "mainnet override is reported incompatible",
+    bad.config.explicitRpcUrlDevnetCompatible === false && bad.config.endpointResolved === false,
+  );
 }
 
 // ------------------------------------- bounded transport metadata classification

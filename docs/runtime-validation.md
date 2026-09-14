@@ -1207,3 +1207,31 @@ Still NOT proven: deployed-runtime network reading. The fix is source-only,
 `SIGNER_DIAGNOSTIC_ENABLED` stays `"false"`, no live attempt was made, and no
 RPC compatibility or wallet readiness is claimed until a reviewed scoped probe
 runs once. No wallet flag, schema, wrapping key, provisioning, funds or mainnet.
+
+## Server-only Helius devnet RPC configuration (SOURCE ONLY, DIAGNOSTIC OFF)
+
+Secret NAMES only; no value is read into logs, chat, source or reports.
+
+- `BRUH_DEVNET_API_KEY` — used to construct `https://devnet.helius-rpc.com/?api-key=<key>` inside
+  `src/lib/custody/rpc-endpoint.server.ts`. The endpoint string is passed directly into the HTTP
+  adapter and is never logged, reported or returned.
+- `SOLANA_RPC_URL` — OPTIONAL explicit override. Accepted only when HTTPS, host exactly
+  `devnet.helius-rpc.com`, no userinfo, no fragment. Mainnet hosts, other providers, `http`/`ws`,
+  look-alike suffix hosts and malformed URLs fail closed. There is NO fallback to a public RPC
+  endpoint and NO fallback to mainnet.
+- `BRUH_MAINNET_API_KEY` — deliberately NOT read by any module.
+- Devnet genesis is still proven at call time (`assertDevnetGenesis`) before any other RPC use, in
+  addition to the static host/scheme checks.
+- Reports carry booleans only: `devnetApiKeyPresent`, `devnetApiKeyWellFormed`,
+  `explicitRpcUrlPresent`, `explicitRpcUrlDevnetCompatible`, `endpointResolved`,
+  `mainnetKeyUsed: false`, `publicRpcFallbackUsed: false`. Self-check adds the
+  `endpointHostIsDevnetHelius` check (11 checks total).
+- Bounded 5 s abort, 128 KiB response cap, `redirect: "manual"` with explicit 3xx rejection and
+  opaque provider errors are unchanged.
+- Telegram naming: the Bot API would require `TELEGRAM_BOT_TOKEN`, not `TELEGRAM_API_KEY`. The
+  existing third-party Mini App initData verification is token-free and unchanged.
+
+Tests: `scripts/rpc-endpoint-selftest.ts` 31/31, `scripts/http-rpc-selftest.ts` 129/129,
+`scripts/rpc-diagnostic-selftest.ts` 51/51. All mock transports — no network call, no funding, no
+broadcast. `SIGNER_DIAGNOSTIC_ENABLED` remains `"false"`; nothing published. No deployed-Worker RPC
+proof is claimed.

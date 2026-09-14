@@ -13,6 +13,7 @@ import {
 } from "./diagnostic-probe.server";
 import { unauthorizedResponse, verifySignerRequest, type NonceConsumer } from "./request-auth.server";
 import { runReadOnlyRpcSelfCheck } from "./rpc-self-check.server";
+import type { DevnetRpcEnv } from "./rpc-endpoint.server";
 
 export interface RpcProbeDeps {
   /** Explicit kill switch. Anything other than the literal "true" disables. */
@@ -23,6 +24,8 @@ export interface RpcProbeDeps {
   now?: number;
   /** Injected only by tests; production uses global fetch. */
   transport?: typeof fetch;
+  /** Injected only by tests; production reads the server environment. */
+  rpcEnv?: DevnetRpcEnv;
 }
 
 const json = (body: unknown, status: number, extra: Record<string, string> = {}): Response =>
@@ -57,7 +60,10 @@ export async function handleRpcDiagnosticProbe(
   });
   if (!auth.ok) return unauthorizedResponse();
 
-  const report = await runReadOnlyRpcSelfCheck(deps.transport ?? fetch);
+  const report = await runReadOnlyRpcSelfCheck(
+    deps.transport ?? ((input, init) => globalThis.fetch(input, init)),
+    ...(deps.rpcEnv === undefined ? [] : [deps.rpcEnv]),
+  );
   return json(
     {
       ok: report.ok,
@@ -72,6 +78,8 @@ export async function handleRpcDiagnosticProbe(
       // Bounded transport metadata: numeric statuses and failure-class booleans
       // only. No body, headers, endpoint, key or provider error text.
       transport: report.transport,
+      // Presence and devnet-compatibility booleans only: never a key, URL or host.
+      config: report.config,
     },
     200,
   );
