@@ -1146,3 +1146,23 @@ mainnet. Source SHA before this slice: 235cf4fa73ee20bbbf3c419d31b89133ce34e273
 - The binding fix is a plausible match for the observed live `transport_failure` (1 attempt, 0 responses, no timeout) but is NOT claimed as the confirmed cause until the bounded live trial verifies.
 - No wallet flag, store, wrapping key, provisioning, schema application, funds or mainnet. No repeated live polls; secret changes need a republish.
 - tsgo --noEmit clean; `bun run build` PASS at the SHA above.
+
+## Bounded live RPC trial result (binding fix, 2026-09-14) — FAILURE, network reading still NOT proven
+
+Deployment under test: published `1724e5cad1c94f95d47e24f24e40b48b4b09b05d` (explicit globalThis.fetch binding fix). Single attempt, no repeats.
+
+Exact observed facts (nothing else logged):
+- unauthenticated_status=401 (PASS)
+- signed_status=200; ok=false; network=devnet; readOnly=true; broadcast=false; rpcCalls=1; checks=3/10
+- transport: classification=transport_failure; attempts=1; responses=0; statuses=[]; httpErrors=0; timedOut=false; transportFailed=true; illegalInvocation=false
+- passed checks: endpointPinnedHttps, noBroadcastAttempted, ephemeralInputSeedsCleared
+- failed checks: onlyReadOnlyMethodsRequested, genesisIsDevnet, finalizedBlockhashObtained, blockHeightIsSafeInteger, messageFeeWithinReservedCap, draftFieldsPreserved, threeReadCallsOnly
+- replay_status=401 (PASS — byte-identical replay denied on the deployed runtime)
+
+Interpretation, bounded to safe metadata only:
+- The explicit `globalThis.fetch` binding fix did NOT resolve the failure: `illegalInvocation=false`, so wrong-receiver is ruled out as the observed cause.
+- The first fetch attempt fails with a transport-layer failure (no HTTP response, not a timeout). Root cause remains undiagnosed; no provider or error cause is invented. A plausible unverified hypothesis is egress policy on the deployed host, but that is NOT established fact.
+- PROVEN live: route reachable; durable fail-closed auth accepts exactly one signed request; unauthenticated and replay denied; pinned HTTPS devnet endpoint; no broadcast; seeds cleared.
+- NOT PROVEN: deployed-runtime RPC capability. No value may be substituted from stored records.
+
+`SIGNER_DIAGNOSTIC_ENABLED` set back to `"false"` immediately after this single attempt (name and literal value only; caller credentials untouched). Takes effect live after Codex shutdown publish. No repeated polls.
