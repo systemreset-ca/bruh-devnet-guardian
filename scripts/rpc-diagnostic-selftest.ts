@@ -13,7 +13,10 @@ import { randomBytes } from "node:crypto";
 
 import { MAX_PROBE_BODY_BYTES } from "../src/lib/custody/diagnostic-probe.server";
 import { handleRpcDiagnosticProbe } from "../src/lib/custody/rpc-diagnostic.server";
-import { DIAGNOSTIC_RPC_ENDPOINT } from "../src/lib/custody/rpc-self-check.server";
+import {
+  devnetRpcEnvFromProcess,
+  resolveDevnetRpcEndpoint,
+} from "../src/lib/custody/rpc-endpoint.server";
 import {
   HEADER_KEY_ID,
   HEADER_NONCE,
@@ -29,6 +32,11 @@ import {
   createFailingNonceStore,
   createInMemoryNonceStore,
 } from "./support/in-memory-nonce-store";
+
+// Throwaway configuration for this offline suite only: not a real provider key.
+process.env["BRUH_DEVNET_API_KEY"] = "throwaway-selftest-key-0002";
+delete process.env["SOLANA_RPC_URL"];
+const DIAGNOSTIC_RPC_ENDPOINT = resolveDevnetRpcEndpoint(devnetRpcEnvFromProcess());
 
 let passed = 0;
 let failed = 0;

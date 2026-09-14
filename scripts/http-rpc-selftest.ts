@@ -11,10 +11,16 @@ import {
   signSolTransfer,
   type SolTransferApproval,
 } from "../src/lib/custody/sol-transfer.server";
+import { runReadOnlyRpcSelfCheck } from "../src/lib/custody/rpc-self-check.server";
 import {
-  DIAGNOSTIC_RPC_ENDPOINT,
-  runReadOnlyRpcSelfCheck,
-} from "../src/lib/custody/rpc-self-check.server";
+  devnetRpcEnvFromProcess,
+  resolveDevnetRpcEndpoint,
+} from "../src/lib/custody/rpc-endpoint.server";
+
+// Throwaway configuration for this offline suite only: not a real provider key.
+process.env["BRUH_DEVNET_API_KEY"] = "throwaway-selftest-key-0001";
+delete process.env["SOLANA_RPC_URL"];
+const DIAGNOSTIC_RPC_ENDPOINT = resolveDevnetRpcEndpoint(devnetRpcEnvFromProcess());
 
 let pass = 0;
 let fail = 0;
