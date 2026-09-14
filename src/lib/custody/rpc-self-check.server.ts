@@ -152,9 +152,12 @@ function uuid(): string {
  */
 export async function runReadOnlyRpcSelfCheck(
   transport: typeof fetch = (input, init) => globalThis.fetch(input, init),
+  env: DevnetRpcEnv = devnetRpcEnvFromProcess(),
 ): Promise<RpcSelfCheckReport> {
+  const config = describeDevnetRpcConfig(env);
   const checks: Record<string, boolean> = {
     endpointPinnedHttps: false,
+    endpointHostIsDevnetHelius: false,
     onlyReadOnlyMethodsRequested: false,
     genesisIsDevnet: false,
     finalizedBlockhashObtained: false,
