@@ -136,6 +136,8 @@ export interface RpcSelfCheckReport {
   passedCount: number;
   checks: Record<string, boolean>;
   transport: RpcTransportMetadata;
+  /** Presence and devnet-compatibility booleans only. Never a key or URL. */
+  config: DevnetRpcConfigReport;
 }
 
 function uuid(): string {
