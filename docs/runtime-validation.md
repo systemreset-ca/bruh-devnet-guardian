@@ -1137,3 +1137,12 @@ network call was made and no live request was repeated.
 flag, schema application, wrapping key, provisioning activation, funds or
 mainnet. Source SHA before this slice: 235cf4fa73ee20bbbf3c419d31b89133ce34e273
 (this slice auto-committed on top). Nothing published by me.
+
+## Bounded live RPC trial preparation (binding fix, 2026-09-14)
+
+- Source under test: `1724e5cad1c94f95d47e24f24e40b48b4b09b05d` (explicit `globalThis.fetch` binding in both `runReadOnlyRpcSelfCheck` default transport and `DevnetHttpSolRpc` constructor default; no fallback; disabled gate returns 404 no-store before constructing nonce dependencies).
+- `SIGNER_DIAGNOSTIC_ENABLED` set to `"true"` (name and literal value only; caller credentials untouched) for ONE bounded live trial. Takes effect live only after Codex republish; set back to `"false"` immediately after the single attempt, success or failure.
+- Expected evidence: signed 200 with `ok=true`, 10/10 checks, exactly 3 reads, plus exact replay 401. A disabled 404 is NOT success proof.
+- The binding fix is a plausible match for the observed live `transport_failure` (1 attempt, 0 responses, no timeout) but is NOT claimed as the confirmed cause until the bounded live trial verifies.
+- No wallet flag, store, wrapping key, provisioning, schema application, funds or mainnet. No repeated live polls; secret changes need a republish.
+- tsgo --noEmit clean; `bun run build` PASS at the SHA above.
