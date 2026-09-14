@@ -116,6 +116,7 @@ const report = (await signed.json()) as {
     timedOut?: unknown;
     transportFailed?: unknown;
     illegalInvocation?: unknown;
+    failureFingerprint?: unknown;
     classification?: unknown;
   };
 };
@@ -130,7 +131,25 @@ console.log(
   `transport classification=${String(meta.classification)} attempts=${String(meta.attemptCount)} ` +
     `responses=${String(meta.responseCount)} statuses=${JSON.stringify(meta.statuses ?? [])} ` +
     `httpErrors=${String(meta.httpErrorCount)} timedOut=${String(meta.timedOut)} ` +
-    `transportFailed=${String(meta.transportFailed)} illegalInvocation=${String(meta.illegalInvocation)}`,
+    `transportFailed=${String(meta.transportFailed)} illegalInvocation=${String(meta.illegalInvocation)} ` +
+    `fingerprint=${String(meta.failureFingerprint)}`,
+);
+const FINGERPRINTS = [
+  "none",
+  "illegal_invocation",
+  "unsupported_redirect_mode",
+  "outside_request_context",
+  "invalid_abort_signal",
+  "aborted",
+  "dns_failure",
+  "connection_refused",
+  "tls_failure",
+  "type_error_other",
+  "unknown",
+];
+check(
+  "failure fingerprint is one fixed enum member",
+  FINGERPRINTS.includes(String(meta.failureFingerprint)),
 );
 check(
   "transport metadata is bounded (numbers, booleans and one fixed label only)",

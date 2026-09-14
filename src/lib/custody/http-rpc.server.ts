@@ -63,11 +63,17 @@ export class DevnetHttpSolRpc {
     try {
       const response = await this.transport(this.endpoint, {
         method: "POST",
-        redirect: "error",
+        // Deviation from the reviewed upstream source, evidenced in an isolated
+        // worker runtime: `redirect: "error"` is rejected by this host with a
+        // TypeError BEFORE any request is made, so no read ever happened. The
+        // policy is unchanged — redirects are never followed: "manual" surfaces
+        // the 3xx as a response and the explicit check below rejects it.
+        redirect: "manual",
         signal: controller.signal,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
       });
+      if (response.status >= 300 && response.status < 400) throw new Error();
       if (!response.ok || !response.body) throw new Error();
       const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];

@@ -29,6 +29,64 @@ import { DevnetHttpSolRpc, type SolTransferDraft } from "./http-rpc.server";
 export const DIAGNOSTIC_RPC_ENDPOINT = "https://api.devnet.solana.com";
 
 const READ_ONLY_METHODS = new Set(["getGenesisHash", "getLatestBlockhash", "getFeeForMessage"]);
+
+/** Fixed enum values only — never raw error text. */
+export type TransportFailureFingerprint =
+  | "none"
+  | "illegal_invocation"
+  | "unsupported_redirect_mode"
+  | "outside_request_context"
+  | "invalid_abort_signal"
+  | "aborted"
+  | "dns_failure"
+  | "connection_refused"
+  | "tls_failure"
+  | "type_error_other"
+  | "unknown";
+
+const CAUSE_CODES: Record<string, TransportFailureFingerprint> = {
+  ENOTFOUND: "dns_failure",
+  EAI_AGAIN: "dns_failure",
+  ECONNREFUSED: "connection_refused",
+  ECONNRESET: "connection_refused",
+  EPROTO: "tls_failure",
+  ERR_TLS_CERT_ALTNAME_INVALID: "tls_failure",
+  DEPTH_ZERO_SELF_SIGNED_CERT: "tls_failure",
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: "tls_failure",
+  CERT_HAS_EXPIRED: "tls_failure",
+};
+
+/**
+ * Internal-only inspection of the thrown outbound-fetch exception. It returns a
+ * fixed enum member for known fingerprints and never returns, logs or stores the
+ * raw name, message, code, cause, URL, body, header or stack.
+ */
+export function classifyTransportFailure(error: unknown): TransportFailureFingerprint {
+  if (!(error && typeof error === "object")) return "unknown";
+  const name = "name" in error ? String(error["name"]) : "";
+  const message = "message" in error ? String(error["message"]) : "";
+  const lower = message.toLowerCase();
+  const code =
+    "cause" in error && error["cause"] && typeof error["cause"] === "object"
+      ? String((error["cause"] as { code?: unknown }).code ?? "")
+      : "code" in error
+        ? String(error["code"])
+        : "";
+
+  if (name === "AbortError" || name === "TimeoutError") return "aborted";
+  // Prefix match: the real host message continues past the two words and may
+  // append a documentation URL.
+  if (lower.startsWith("illegal invocation")) return "illegal_invocation";
+  if (lower.startsWith("invalid redirect value")) return "unsupported_redirect_mode";
+  if (lower.includes("request outside of a request context")) return "outside_request_context";
+  if (lower.includes("disallowed operation called within global scope"))
+    return "outside_request_context";
+  if (lower.includes("abortsignal")) return "invalid_abort_signal";
+  const mapped = CAUSE_CODES[code];
+  if (mapped) return mapped;
+  if (name === "TypeError") return "type_error_other";
+  return "unknown";
+}
 const FEE_CAP_LAMPORTS = "100000";
 
 /**
@@ -50,6 +108,12 @@ export interface RpcTransportMetadata {
    * name or message text is ever carried.
    */
   illegalInvocation: boolean;
+  /**
+   * Fixed enum for KNOWN failure fingerprints only. Derived internally from the
+   * thrown exception, but NO raw name, message, code, cause, URL or stack text
+   * is ever carried out of this module.
+   */
+  failureFingerprint: TransportFailureFingerprint;
   classification:
     | "no_attempt"
     | "responded"
@@ -103,6 +167,7 @@ export async function runReadOnlyRpcSelfCheck(
   let timedOut = false;
   let transportFailed = false;
   let illegalInvocation = false;
+  let failureFingerprint: TransportFailureFingerprint = "none";
   const countingTransport: typeof fetch = async (input, init) => {
     calls += 1;
     let method = "";
@@ -125,12 +190,10 @@ export async function runReadOnlyRpcSelfCheck(
       return response;
     } catch (error) {
       // Only the failure CLASS is recorded — never the error message or body.
-      const name =
-        error && typeof error === "object" && "name" in error ? String(error["name"]) : "";
-      if (error instanceof TypeError && error.message === "Illegal invocation") {
-        illegalInvocation = true;
-      }
-      if (name === "AbortError" || name === "TimeoutError") timedOut = true;
+      const fingerprint = classifyTransportFailure(error);
+      if (failureFingerprint === "none") failureFingerprint = fingerprint;
+      if (fingerprint === "illegal_invocation") illegalInvocation = true;
+      if (fingerprint === "aborted") timedOut = true;
       else transportFailed = true;
       throw new Error("Custody RPC transport failure.");
     }
@@ -220,6 +283,7 @@ export async function runReadOnlyRpcSelfCheck(
       timedOut,
       transportFailed,
       illegalInvocation,
+      failureFingerprint,
       classification,
     },
   };

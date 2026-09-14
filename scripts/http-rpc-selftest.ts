@@ -277,8 +277,19 @@ for (const [name, raw] of [
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: DEVNET_GENESIS }), { status: 200 });
   };
   await new DevnetHttpSolRpc(ENDPOINT, inspecting).assertDevnetGenesis();
-  check("redirects are refused", sawRedirect === "error");
-  check("json content type is sent", sawContentType === "application/json");
+  // "manual" plus an explicit 3xx rejection: this host rejects redirect:"error"
+  // with a TypeError before any request is made.
+  check("redirects are never followed", sawRedirect === "manual");
+  check("json content type is sent (redirect mode)", sawContentType === "application/json");
+}
+{
+  const redirecting: typeof fetch = async () =>
+    new Response(null, { status: 302, headers: { location: "https://example.invalid/" } });
+  check(
+    "a 3xx response is rejected instead of followed",
+    await rejects(() => new DevnetHttpSolRpc(ENDPOINT, redirecting).assertDevnetGenesis()),
+  );
+  
 }
 
 // --------------------------------------------------- exact signed bytes binding
@@ -413,7 +424,7 @@ for (const [name, raw] of [
   const serialized = JSON.stringify(report);
   check("transport metadata leaks no provider error text", !serialized.includes("unreachable") && !serialized.includes("provider.example"));
   check("transport metadata leaks no endpoint", !serialized.includes("solana.com") && !serialized.includes("https://"));
-  check("transport metadata values are numbers, booleans and a fixed label", Object.entries(meta).every(([key, value]) => key === "classification" ? typeof value === "string" : key === "statuses" ? Array.isArray(value) && value.every((v) => typeof v === "number") : typeof value === "number" || typeof value === "boolean"));
+  check("transport metadata values are numbers, booleans and a fixed label", Object.entries(meta).every(([key, value]) => key === "classification" || key === "failureFingerprint" ? typeof value === "string" : key === "statuses" ? Array.isArray(value) && value.every((v) => typeof v === "number") : typeof value === "number" || typeof value === "boolean"));
 }
 {
   const invalid: typeof fetch = async () => new Response("{not json", { status: 200 });
@@ -496,6 +507,89 @@ for (const [name, raw] of [
       "no raw error text is carried in transport metadata",
       !JSON.stringify(meta).toLowerCase().includes("typeerror"),
     );
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+// -------------------------------------------- known failure fingerprints only
+{
+  const { classifyTransportFailure } = await import("../src/lib/custody/rpc-self-check.server");
+  const typeError = (message: string) => new TypeError(message);
+  const withCause = (code: string) => Object.assign(new Error("x"), { cause: { code } });
+  const cases: Array<[string, unknown, string]> = [
+    [
+      "real host illegal invocation message with suffix and docs URL",
+      typeError(
+        "Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/observability/errors/ for details.",
+      ),
+      "illegal_invocation",
+    ],
+    ["exact two-word illegal invocation", typeError("Illegal invocation"), "illegal_invocation"],
+    [
+      "unsupported redirect mode",
+      typeError(
+        'Invalid redirect value, must be one of "follow" or "manual" ("error" won\'t be implemented since it does not make sense at the edge; use "manual" and check the response status code).',
+      ),
+      "unsupported_redirect_mode",
+    ],
+    [
+      "fetch outside a request context",
+      new Error("Some functionality, such as asynchronous I/O, is not available: request outside of a request context"),
+      "outside_request_context",
+    ],
+    [
+      "disallowed global-scope operation",
+      new Error("Disallowed operation called within global scope"),
+      "outside_request_context",
+    ],
+    ["invalid abort signal", typeError("Invalid AbortSignal provided"), "invalid_abort_signal"],
+    ["abort", Object.assign(new Error("x"), { name: "AbortError" }), "aborted"],
+    ["dns failure", withCause("ENOTFOUND"), "dns_failure"],
+    ["dns retry failure", withCause("EAI_AGAIN"), "dns_failure"],
+    ["connection refused", withCause("ECONNREFUSED"), "connection_refused"],
+    ["tls failure", withCause("CERT_HAS_EXPIRED"), "tls_failure"],
+    ["other type error", typeError("something else entirely"), "type_error_other"],
+    ["unrecognised failure", new Error("mystery"), "unknown"],
+    ["non-object throw", "boom", "unknown"],
+  ];
+  for (const [label, error, expected] of cases) {
+    check(`fingerprint: ${label}`, classifyTransportFailure(error) === expected);
+  }
+}
+{
+  const original = globalThis.fetch;
+  globalThis.fetch = (() => {
+    throw new TypeError(
+      'Invalid redirect value, must be one of "follow" or "manual" ("error" won\'t be implemented since it does not make sense at the edge).',
+    );
+  }) as unknown as typeof fetch;
+  try {
+    const meta = (await runReadOnlyRpcSelfCheck()).transport;
+    check("redirect-mode rejection is fingerprinted", meta.failureFingerprint === "unsupported_redirect_mode");
+    check("redirect-mode rejection classifies as transport failure", meta.classification === "transport_failure");
+    check("redirect-mode rejection makes no request", meta.responseCount === 0 && meta.attemptCount === 1);
+    check("redirect-mode rejection is not an illegal invocation", meta.illegalInvocation === false);
+    check(
+      "no raw provider or error text is carried with the fingerprint",
+      !/redirect value|typeerror|cloudflare|api\.devnet/i.test(JSON.stringify(meta)),
+    );
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+{
+  const original = globalThis.fetch;
+  globalThis.fetch = (() => {
+    throw new TypeError(
+      "Illegal invocation: function called with incorrect `this` reference. See https://developers.cloudflare.com/workers/",
+    );
+  }) as unknown as typeof fetch;
+  try {
+    const meta = (await runReadOnlyRpcSelfCheck()).transport;
+    check("long illegal-invocation message is still detected", meta.illegalInvocation === true);
+    check("long illegal-invocation message fingerprint", meta.failureFingerprint === "illegal_invocation");
+    check("no docs URL is carried", !JSON.stringify(meta).includes("://"));
   } finally {
     globalThis.fetch = original;
   }
