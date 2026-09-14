@@ -290,6 +290,7 @@ export async function runReadOnlyRpcSelfCheck(
     checkCount: entries.length,
     passedCount,
     checks,
+    config,
     transport: {
       attemptCount: calls,
       responseCount: statuses.length,
