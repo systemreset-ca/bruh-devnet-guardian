@@ -167,6 +167,7 @@ export async function runReadOnlyRpcSelfCheck(
   let timedOut = false;
   let transportFailed = false;
   let illegalInvocation = false;
+  let failureFingerprint: TransportFailureFingerprint = "none";
   const countingTransport: typeof fetch = async (input, init) => {
     calls += 1;
     let method = "";
