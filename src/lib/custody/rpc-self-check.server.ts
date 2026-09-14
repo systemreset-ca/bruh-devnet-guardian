@@ -190,12 +190,10 @@ export async function runReadOnlyRpcSelfCheck(
       return response;
     } catch (error) {
       // Only the failure CLASS is recorded — never the error message or body.
-      const name =
-        error && typeof error === "object" && "name" in error ? String(error["name"]) : "";
-      if (error instanceof TypeError && error.message === "Illegal invocation") {
-        illegalInvocation = true;
-      }
-      if (name === "AbortError" || name === "TimeoutError") timedOut = true;
+      const fingerprint = classifyTransportFailure(error);
+      if (failureFingerprint === "none") failureFingerprint = fingerprint;
+      if (fingerprint === "illegal_invocation") illegalInvocation = true;
+      if (fingerprint === "aborted") timedOut = true;
       else transportFailed = true;
       throw new Error("Custody RPC transport failure.");
     }
