@@ -277,7 +277,18 @@ for (const [name, raw] of [
     return new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: DEVNET_GENESIS }), { status: 200 });
   };
   await new DevnetHttpSolRpc(ENDPOINT, inspecting).assertDevnetGenesis();
-  check("redirects are refused", sawRedirect === "error");
+  // "manual" plus an explicit 3xx rejection: this host rejects redirect:"error"
+  // with a TypeError before any request is made.
+  check("redirects are never followed", sawRedirect === "manual");
+  check("json content type is sent (redirect mode)", sawContentType === "application/json");
+}
+{
+  const redirecting: typeof fetch = async () =>
+    new Response(null, { status: 302, headers: { location: "https://example.invalid/" } });
+  check(
+    "a 3xx response is rejected instead of followed",
+    await rejects(() => new DevnetHttpSolRpc(ENDPOINT, redirecting).assertDevnetGenesis()),
+  );
   check("json content type is sent", sawContentType === "application/json");
 }
 
