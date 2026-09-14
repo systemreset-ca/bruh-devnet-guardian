@@ -11,7 +11,10 @@ import {
   signSolTransfer,
   type SolTransferApproval,
 } from "../src/lib/custody/sol-transfer.server";
-import { runReadOnlyRpcSelfCheck } from "../src/lib/custody/rpc-self-check.server";
+import {
+  DIAGNOSTIC_RPC_ENDPOINT,
+  runReadOnlyRpcSelfCheck,
+} from "../src/lib/custody/rpc-self-check.server";
 
 let pass = 0;
 let fail = 0;
@@ -425,6 +428,7 @@ for (const [name, raw] of [
 // explicitly rather than pass an extracted, unbound reference.
 {
   const original = globalThis.fetch;
+  let brandedId = 0;
   let receiverOk = false;
   const branded = function (this: unknown, _input: RequestInfo | URL, init?: RequestInit) {
     if (this !== globalThis) throw new TypeError("Illegal invocation");
@@ -448,7 +452,6 @@ for (const [name, raw] of [
       }),
     );
   } as unknown as typeof fetch;
-  let brandedId = 0;
   globalThis.fetch = branded;
   try {
     const report = await runReadOnlyRpcSelfCheck();
@@ -464,7 +467,7 @@ for (const [name, raw] of [
     const rpc = new DevnetHttpSolRpc(DIAGNOSTIC_RPC_ENDPOINT);
     let adapterOk = true;
     try {
-      await rpc.genesisHash();
+      await rpc.assertDevnetGenesis();
     } catch {
       adapterOk = false;
     }
